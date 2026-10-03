@@ -22,6 +22,11 @@ namespace Tester is
             fi
         si
 
+        // How long the test's program took to run and to say anything, null
+        // for a test that ran no program. Set by the runner once the program
+        // has finished, read by whatever reports the result.
+        timing: TIMING? public
+
         progress_string: string => "{progress.to_string().pad_left(2)}%"
 
         is_pass: bool is
@@ -144,5 +149,52 @@ namespace Tester is
 
             return result.to_string()
         si
+    si
+
+    // How long a test's program ran for, and how long it was silent before it
+    // said anything at all. The two answer different questions: the first says
+    // what the program costs, the second what a reader waiting for it to do
+    // something visible sits through - which is what the playground's readers
+    // wait through too, under a runtime many times slower than this one.
+    //
+    // Marked from the runner as the program runs: started when the process has
+    // been created, first output when its earliest output arrives, finished
+    // once it has exited. A program that says nothing leaves first output
+    // absent.
+    class TIMING is
+        _started_ms: long private
+        _finished_ms: long private
+        _first_output_ms: long? private
+
+        run_ms: int public =>
+            cast int(_finished_ms - _started_ms)
+
+        first_output_ms: int? public =>
+            if let first = _first_output_ms then
+                cast int(first - _started_ms)
+            fi
+
+        init() is si
+
+        mark_started(ms: long) is
+            _started_ms = ms
+        si
+
+        mark_finished(ms: long) is
+            _finished_ms = ms
+        si
+
+        mark_first_output(ms: long) is
+            if !_first_output_ms? then
+                _first_output_ms = ms
+            fi
+        si
+
+        to_string() -> string =>
+            if let first = first_output_ms then
+                "run {run_ms} ms, first output {first} ms"
+            else
+                "run {run_ms} ms, no output"
+            fi
     si
 si

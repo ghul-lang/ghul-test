@@ -169,7 +169,25 @@ namespace Tester is
 
             _record.last = path
 
-            write_event(get_event_kind(result), path)
+            // A test that ran a program says how long it ran and how long it
+            // was silent first, so a run's events file answers which programs
+            // a reader would wait on without timing them again.
+            if let timing = result.timing then
+                let first =
+                    if let first_output = timing.first_output_ms then
+                        "{first_output} ms"
+                    else
+                        "none"
+                    fi
+
+                write_event(
+                    get_event_kind(result),
+                    "{path} [run {timing.run_ms} ms, first output {first}]"
+                )
+            else
+                write_event(get_event_kind(result), path)
+            fi
+
             flush()
         si
 
