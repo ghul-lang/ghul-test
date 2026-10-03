@@ -36,6 +36,10 @@ namespace Tester is
 
         _failure: FAILURE?
 
+        // How long the test's program took, set where the program is run and
+        // carried onto its result so a reporter can say it.
+        _program_timing: TIMING?
+
         init(..) is
             if !_collate_environment? then
                 _collate_environment = MAP[string,string]()
@@ -44,11 +48,16 @@ namespace Tester is
         si
 
         get_result() -> Result is
-            if _failure? then
-                return _failure
-            else
-                return PASS(_test)
-            fi
+            let result =
+                if _failure? then
+                    _failure
+                else
+                    PASS(_test)
+                fi
+
+            result.timing = _program_timing
+
+            return result
         si
 
         get_run() -> () -> Result
@@ -621,6 +630,8 @@ namespace Tester is
                 return false
             fi
 
+            _program_timing = TIMING()
+
             let exit_status =
                 run(
                     _target_cli,
@@ -632,7 +643,8 @@ namespace Tester is
                     "run.err",
                     null,
                     input_file(),
-                    session_file()
+                    session_file(),
+                    _program_timing!
                 )
 
             return exit_status_is_expected("binary", exit_status, "run.err", "run.exit")
@@ -1157,6 +1169,22 @@ namespace Tester is
             environment: Iterable[Pair[string,string]]?,
             in_file: string?,
             session_file: string?
+        ) -> int =>
+            run(
+                path, arguments, timeout, out_file, err_file, environment,
+                in_file, session_file, TIMING()
+            )
+
+        run(
+            path: string,
+            arguments: Iterable[string],
+            timeout: int,
+            out_file: string?,
+            err_file: string?,
+            environment: Iterable[Pair[string,string]]?,
+            in_file: string?,
+            session_file: string?,
+            timing: TIMING
         ) -> int
         is
             let process =
@@ -1164,7 +1192,7 @@ namespace Tester is
 
             return wait(
                 process, path, timeout, out_file, err_file, in_file,
-                session_file
+                session_file, timing
             )
         si
 
@@ -1232,12 +1260,29 @@ namespace Tester is
             err_file_name: string?,
             in_file_name: string?,
             session_file_name: string?
+        ) -> int =>
+            wait(
+                process, path, timeout, out_file_name, err_file_name,
+                in_file_name, session_file_name, TIMING()
+            )
+
+        wait(
+            process: Process,
+            path: string,
+            timeout: int,
+            out_file_name: string?,
+            err_file_name: string?,
+            in_file_name: string?,
+            session_file_name: string?,
+            timing: TIMING
         ) -> int is
+            timing.mark_started(now_ms())
+
             let reading_out =
                 if let session = session_file_name then
-                    Tasks.TASK.run(() -> string => drive_session(process, session))
+                    Tasks.TASK.run(() -> string => drive_session(process, session, timing))
                 else
-                    process.standard_output.read_to_end_async()
+                    Tasks.TASK.run(() -> string => drain_output(process, timing))
                 fi
 
             let reading_err = process.standard_error.read_to_end_async()
@@ -1256,6 +1301,8 @@ namespace Tester is
                 )
             fi
 
+            timing.mark_finished(now_ms())
+
             if out_file_name? then
                 write_all_text(out_file_name, reading_out.result)
             fi
@@ -1265,6 +1312,33 @@ namespace Tester is
             fi
 
             return process.exit_code
+        si
+
+        now_ms() -> long static =>
+            System.DateTimeOffset.utc_now.to_unix_time_milliseconds()
+
+        // All of standard output, read as it arrives so the moment the first
+        // of it appeared can be recorded: a program that prints and then works
+        // and one that works and then prints cost the same to run, and only
+        // the arrival of the first output tells them apart.
+        drain_output(process: Process, timing: TIMING) -> string is
+            let text = StringBuilder()
+            let buffer = (0..4096) |> map(_ => ' ') |> collect_array()
+
+            do
+                let count =
+                    process.standard_output.read(buffer, 0, buffer.count)
+
+                if count <= 0 then
+                    break
+                fi
+
+                timing.mark_first_output(now_ms())
+
+                text.append(string(buffer, 0, count))
+            od
+
+            return text.to_string()
         si
 
         // Drives a program that prompts, the way a person at a terminal does.
@@ -1279,7 +1353,7 @@ namespace Tester is
         // A program that reads without prompting first is not driven this way -
         // nothing marks the point to answer at, so it waits until the timeout.
         // `run.in` is for those, and sends the whole input at once.
-        drive_session(process: Process, session_file_name: string) -> string is
+        drive_session(process: Process, session_file_name: string, timing: TIMING) -> string is
             let pending = File.read_all_lines(get_path(session_file_name))
             let transcript = StringBuilder()
             let buffer = (0..4096) |> map(_ => ' ') |> collect_array()
@@ -1293,6 +1367,8 @@ namespace Tester is
                 if count <= 0 then
                     break
                 fi
+
+                timing.mark_first_output(now_ms())
 
                 let arrived = string(buffer, 0, count)
 
