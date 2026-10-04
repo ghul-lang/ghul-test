@@ -40,7 +40,16 @@ namespace Tester is
         // carried onto its result so a reporter can say it.
         _program_timing: TIMING?
 
+        // Whether the test is built for the wasm target, and so run by Node:
+        // said by its flags, or by its project file where the project is
+        // what is built.
+        _is_wasm: bool
+
         init(..) is
+            _is_wasm =
+                _test.is_wasm() \/
+                (_compiler_under_test.is_dotnet_build /\ TEST.names_wasm_target(PROJECT_OPTIONS.read(_test.path)))
+
             if !_collate_environment? then
                 _collate_environment = MAP[string,string]()
                 _collate_environment.add("LC_COLLATE", "C")
@@ -192,7 +201,7 @@ namespace Tester is
                 return
             fi
 
-            if !_test.is_wasm() then
+            if !_is_wasm then
                 _compiler_under_test.run_ln_runtime(self)
             fi
 
@@ -274,7 +283,7 @@ namespace Tester is
             // A .NET formatted binary needs `ghul-runtime.dll` beside it just
             // as the original does, and this phase runs before the point
             // where the original's is linked. A wasm one needs nothing.
-            if !_test.is_wasm() then
+            if !_is_wasm then
                 _compiler_under_test.run_ln_runtime(self)
             fi
 
@@ -369,19 +378,18 @@ namespace Tester is
             arguments
         si
 
-        // The command line for a run: the binary, then whatever `run.args`
-        // holds.
         // The program a test's binary is run with: the .NET host, or Node
         // for a test built for the wasm target.
         program_cli() -> string =>
-            if _test.is_wasm() then "node" else _target_cli fi
+            if _is_wasm then "node" else _target_cli fi
 
-        // A wasm test's program is started through the loader the compiler
-        // wrote beside its module, which has the module's name and the
-        // extension `.mjs`.
+        // The command line for a run: the binary, then whatever `run.args`
+        // holds. A wasm test's program is started through the loader the
+        // compiler wrote beside its module, which has the module's name and
+        // the extension `.mjs`.
         run_command_line(binary: string) -> Collections.List[string] is
             let program =
-                if _test.is_wasm() then
+                if _is_wasm then
                     Path.change_extension(binary, ".mjs") ?? binary
                 else
                     binary
@@ -653,20 +661,31 @@ namespace Tester is
 
             _program_timing = TIMING()
 
-            let exit_status =
-                run(
-                    program_cli(),
-                    // but this needs to be a path relative to the directory
-                    // that the test is in
-                    run_command_line(_compiler_under_test.get_binary_path_relative_to_test_folder(self)),
-                    PROGRAM_TIMEOUT_MS,
-                    "run.out",
-                    "run.err",
-                    null,
-                    input_file(),
-                    session_file(),
-                    _program_timing!
-                )
+            let exit_status mut = 0
+
+            try
+                exit_status =
+                    run(
+                        program_cli(),
+                        // but this needs to be a path relative to the directory
+                        // that the test is in
+                        run_command_line(_compiler_under_test.get_binary_path_relative_to_test_folder(self)),
+                        PROGRAM_TIMEOUT_MS,
+                        "run.out",
+                        "run.err",
+                        null,
+                        input_file(),
+                        session_file(),
+                        _program_timing!
+                    )
+            catch e: System.ComponentModel.Win32Exception
+                if _is_wasm then
+                    add_fail("could not start node, which runs a test built for the wasm target: {e.message}")
+                    return false
+                fi
+
+                throw e
+            yrt
 
             return exit_status_is_expected("binary", exit_status, "run.err", "run.exit")
         si

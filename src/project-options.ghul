@@ -1,0 +1,46 @@
+namespace Tester is
+    use IO.File
+    use IO.Directory
+
+    // The compiler options a test's project files carry. A test built with
+    // `--use-dotnet-build` is compiled from its `.ghulproj`, so it states
+    // its options there, in `GhulOptions`, rather than in `ghulflags`.
+    class PROJECT_OPTIONS is
+        // Every `GhulOptions` value in the project files in `path`, joined
+        // by spaces; empty where there are none.
+        read(path: string) -> string static is
+            let result = System.Text.StringBuilder()
+
+            for project in Directory.get_files(path, "*.ghulproj") do
+                result.append(" ").append(options_in(File.read_all_text(project)))
+            od
+
+            return result.to_string()
+        si
+
+        // Every `GhulOptions` value in the text of a project file, joined by
+        // spaces.
+        options_in(project: string) -> string static is
+            let open = "<GhulOptions>"
+            let close = "</GhulOptions>"
+
+            let result = System.Text.StringBuilder()
+            let start mut = project.index_of(open)
+
+            while start >= 0 do
+                let content = start + open.length
+                let end = project.index_of(close, content)
+
+                if end < 0 then
+                    break
+                fi
+
+                result.append(" ").append(project.substring(content, end - content))
+
+                start = project.index_of(open, end + close.length)
+            od
+
+            return result.to_string()
+        si
+    si
+si
