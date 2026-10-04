@@ -1104,16 +1104,11 @@ namespace Tester is
                 return
             fi
 
-            let prefix =
-                if test_directory.ends_with('/') \/ test_directory.ends_with('\\') then
-                    test_directory
-                else
-                    "{test_directory}/"
-                fi
-
             let content = File.read_all_text(path)
 
-            File.write_all_text(path, content.replace(prefix, ""))
+            File.write_all_text(
+                path,
+                PATH_NORMALISER.normalise(content, test_directory, PATH_NORMALISER.checkout_root(test_directory)))
         si
 
         strip_stack_trace_locations(file_name: string) is
