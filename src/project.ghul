@@ -3,6 +3,8 @@ namespace Tester is
     use IO.Path
 
     use System.Text.Json.JsonDocument
+    use System.Text.Json.JsonDocumentOptions
+    use System.Text.Json.JsonCommentHandling
     use System.Text.Json.JsonElement
     use System.Text.Json.JsonValueKind
 
@@ -58,9 +60,9 @@ namespace Tester is
                 od
             fi
 
+            // ghul-cli builds a manifest that lists no targets for dotnet.
             if targets.count == 0 then
-                problem! = "{MANIFEST} lists no targets"
-                return null
+                targets.add("dotnet")
             fi
 
             let target mut = targets[0]
@@ -80,7 +82,14 @@ namespace Tester is
 
         _parse(path: string, problem: string? ref) -> JsonDocument? static is
             try
-                return JsonDocument.parse(File.read_all_text(Path.join([path, MANIFEST])), _)
+                // Read as ghul-cli reads a manifest: comments and trailing commas
+                // are allowed.
+                let options = _[JsonDocumentOptions]
+
+                options.comment_handling = JsonCommentHandling.SKIP
+                options.allow_trailing_commas = true
+
+                return JsonDocument.parse(File.read_all_text(Path.join([path, MANIFEST])), options)
             catch ex: System.Exception
                 problem! = "{MANIFEST} cannot be read: {ex.message}"
                 return null
