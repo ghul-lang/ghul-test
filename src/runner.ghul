@@ -592,6 +592,7 @@ namespace Tester is
             if !_failure? then
                 delete_files([
                     "binary.exe",
+                    "binary.mjs",
                     "binary.exe.mdb",
                     "binary.runtimeconfig.json",
                     "compiler.out",
@@ -618,6 +619,7 @@ namespace Tester is
                     "format.err",
                     "format.diff",
                     "formatted.exe",
+                    "formatted.mjs",
                     "formatted.exe.mdb",
                     "formatted.runtimeconfig.json",
                     "formatted-compiler.out",
