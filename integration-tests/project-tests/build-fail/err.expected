@@ -1,0 +1,1 @@
+src/main.ghul: 1,5..1,26: error: string is not assignable to int

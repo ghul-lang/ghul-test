@@ -14,7 +14,8 @@ namespace Tester is
     enum CompilerRunMode is
         CI,
         LOCAL,
-        DOTNET
+        DOTNET,
+        GHUL_CLI
     si
 
     class COMPILER_UNDER_TEST(run_mode: CompilerRunMode private) is
@@ -28,7 +29,10 @@ namespace Tester is
 
         @suppress("field-definite-assignment")
         init(..) is
-            if _run_mode == CompilerRunMode.DOTNET then
+            if _run_mode == CompilerRunMode.GHUL_CLI then
+                _executable = "ghul"
+                _arguments = ["build"]
+            elif _run_mode == CompilerRunMode.DOTNET then
                 _executable = "dotnet"
                 _arguments = ["build"]
                 _compiler_command = discover_compiler_command()
@@ -52,6 +56,22 @@ namespace Tester is
         // A dotnet-build test's sources come from its project rather than
         // from the runner, so the formatter phase has nothing to format.
         is_dotnet_build: bool => _run_mode == CompilerRunMode.DOTNET
+
+        // A ghul-cli test is a project whose manifest says what to build and
+        // with which compiler and libraries.
+        is_ghul_cli: bool => _run_mode == CompilerRunMode.GHUL_CLI
+
+        // The target a ghul-cli test is built for, or null for each
+        // project's first.
+        project_target: string? public
+
+        // The command that runs ghul-cli: `ghul` unless the run names another,
+        // such as `dotnet ghul` for a local tool. Words are split on spaces.
+        set_ghul_command(command: string?) is
+            if command? /\ !string.is_null_or_white_space(command) then
+                _executable = command
+            fi
+        si
 
         runtime_path: string => _runtime_path
 
@@ -144,7 +164,27 @@ namespace Tester is
 
             let result mut = -1
 
-            if _run_mode == CompilerRunMode.DOTNET then
+            if _run_mode == CompilerRunMode.GHUL_CLI then
+                // ghul-cli writes its own messages to standard error and the
+                // compiler's to standard output: the shell merges the two in
+                // the order they are written, which two capture files would
+                // lose.
+                let command = LIST[string](["-c", "exec \"$0\" \"$@\" 2>&1"])
+
+                command.add_range(_executable.split([' ']) |> filter(word => word.length > 0))
+                command.add("build")
+
+                command.add_range(["--target", test.project!.target])
+                command.add_range(arguments |> skip(1))
+
+                result = runner.run(
+                    "sh",
+                    command,
+                    RUNNER.BUILD_TIMEOUT_MS,
+                    "compiler.out",
+                    null
+                )
+            elif _run_mode == CompilerRunMode.DOTNET then
                 if _compiler_command? then
                     // MSBuild reads environment variables as properties, so
                     // this sets `GhulCompiler` for the build. Passing it on the
@@ -189,7 +229,7 @@ namespace Tester is
                 return false
             fi
 
-            if _run_mode != CompilerRunMode.DOTNET /\ !runner.read_all_text("compiler.out").contains("*** succeeded ***") then
+            if _run_mode != CompilerRunMode.DOTNET /\ _run_mode != CompilerRunMode.GHUL_CLI /\ !runner.read_all_text("compiler.out").contains("*** succeeded ***") then
                 throw Exception("compiler success exit status but success message not found in output")
             fi
 
@@ -264,6 +304,10 @@ namespace Tester is
         FORMATTED_BINARY: string static => "formatted.exe"
 
         get_binary_path_relative_to_test_folder(runner: RUNNER) -> string is
+            if let project = runner.project then
+                return project.binary_path_relative_to_test_folder
+            fi
+
             if _run_mode == CompilerRunMode.DOTNET then
                 return Path.join(["bin", "Debug", get_target_framework(), "binary.dll"])
             fi
@@ -272,6 +316,10 @@ namespace Tester is
         si
 
         get_binary_path(runner: RUNNER) -> string is
+            if let project = runner.project then
+                return runner.get_path(project.binary_path_relative_to_test_folder)
+            fi
+
             if _run_mode == CompilerRunMode.DOTNET then
                 return Path.join([runner.get_path(), "bin", "Debug", get_target_framework(), "binary.dll"])
             fi
@@ -280,7 +328,7 @@ namespace Tester is
         si
 
         run_ln_runtime(runner: RUNNER) -> bool is
-            if _run_mode == CompilerRunMode.DOTNET then
+            if _run_mode == CompilerRunMode.DOTNET \/ _run_mode == CompilerRunMode.GHUL_CLI then
                 return true
             fi
 

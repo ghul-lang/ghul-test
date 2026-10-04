@@ -46,6 +46,9 @@ namespace Tester is
             let ildasm_override: string? mut =
                 System.Environment.get_environment_variable("GHUL_TEST_ILDASM")
 
+            let ghul_command: string? mut = null
+            let project_target: string? mut = null
+
             let test_paths = LIST[string]()
             let requested_tags = LIST[string]()
             let excluded_tags = LIST[string]()
@@ -59,6 +62,26 @@ namespace Tester is
 
                 if arg =~ "--use-dotnet-build" then
                     run_mode = CompilerRunMode.DOTNET
+                elif arg =~ "--use-ghul-cli" then
+                    run_mode = CompilerRunMode.GHUL_CLI
+                elif arg =~ "--ghul" then
+                    i = i + 1
+
+                    if i >= arguments.count then
+                        Std.write_line("--ghul requires a command argument")
+                        return 1
+                    fi
+
+                    ghul_command = arguments[i]
+                elif arg =~ "--target" then
+                    i = i + 1
+
+                    if i >= arguments.count then
+                        Std.write_line("--target requires a target name argument")
+                        return 1
+                    fi
+
+                    project_target = arguments[i]
                 elif arg =~ "--runtime-dll" then
                     i = i + 1
 
@@ -127,6 +150,8 @@ namespace Tester is
             try
                 compiler_under_test.set_runtime_path(runtime_dll_override)
                 compiler_under_test.set_compiler_command(compiler_override)
+                compiler_under_test.set_ghul_command(ghul_command)
+                compiler_under_test.project_target = project_target
 
                 disassembler = DISASSEMBLER(ildasm_override)
             catch ex: Exception
@@ -200,8 +225,8 @@ namespace Tester is
             Std.write_line("{queue.executed_count} tests enabled")
             Std.write_line("{queue.pass_count}/{queue.executed_count} tests passed")
 
-            for path in queue.undiscovered do
-                Std.write_line("not run: {path} looks like a test but has no ghulflags")
+            for reason in queue.undiscovered do
+                Std.write_line("not run: {reason}")
             od
 
             if queue.fail_count == 0 /\ queue.undiscovered_count == 0 then
