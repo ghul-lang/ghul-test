@@ -1,0 +1,44 @@
+namespace Tests is
+    use Tester
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute
+
+    @TestClass()
+    class PATH_NORMALISER_Should is
+
+        init() is si
+
+        @Test()
+        PATH_NORMALISER__normalise__given_a_path_in_the_test_directory__removes_the_directory() is
+            let content = "/work/repo/tests/maybe/maybe.ghul(6,1,6,8): error : something"
+
+            should(PATH_NORMALISER.normalise(content, "/work/repo/tests/maybe", "/work/repo"))
+                .be("maybe.ghul(6,1,6,8): error : something", "", [])
+        si
+
+        @Test()
+        PATH_NORMALISER__normalise__given_a_path_elsewhere_in_the_checkout__makes_it_relative_to_the_test() is
+            let content = "/work/repo/src/maybe.ghul(36,9,36,18): error : something"
+
+            should(PATH_NORMALISER.normalise(content, "/work/repo/tests/maybe", "/work/repo"))
+                .be("../../src/maybe.ghul(36,9,36,18): error : something", "", [])
+        si
+
+        @Test()
+        PATH_NORMALISER__normalise__given_no_checkout__leaves_other_paths_alone() is
+            let content = "/work/repo/src/maybe.ghul(36,9,36,18): error : something"
+
+            should(PATH_NORMALISER.normalise(content, "/work/repo/tests/maybe", null))
+                .be(content, "", [])
+        si
+
+        @Test()
+        PATH_NORMALISER__normalise__given_a_path_outside_the_checkout__leaves_it_alone() is
+            let content = "/usr/share/dotnet/sdk/Sdk.targets(10,5): error : something"
+
+            should(PATH_NORMALISER.normalise(content, "/work/repo/tests/maybe", "/work/repo"))
+                .be(content, "", [])
+        si
+    si
+si

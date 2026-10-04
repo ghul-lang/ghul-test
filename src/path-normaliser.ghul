@@ -1,0 +1,48 @@
+namespace Tester is
+    use IO.Path
+    use IO.File
+    use IO.Directory
+
+    // Makes the paths a test's output holds independent of where the
+    // repository is checked out, so a snapshot holds on every machine.
+    class PATH_NORMALISER is
+        // `content` with the test directory removed from the paths in it,
+        // and the paths elsewhere in the checkout written relative to the
+        // test directory: a library source next to the tests reads as
+        // `../../src/library.ghul` wherever the checkout is.
+        //
+        // - test_directory: the test's directory, as a full path
+        // - checkout_root: the repository's root directory as a full path,
+        //   or null where the test is not in a repository
+        normalise(content: string, test_directory: string, checkout_root: string?) -> string static is
+            let result mut = content.replace(_with_separator(test_directory), "")
+
+            if let root = checkout_root then
+                let relative = Path.get_relative_path(test_directory, root).replace('\\', '/')
+
+                result = result.replace(_with_separator(root), "{relative}/")
+            fi
+
+            return result
+        si
+
+        // The nearest directory at or above `directory` that holds a `.git`
+        // directory or file, or null where there is none.
+        checkout_root(directory: string) -> string? static is
+            let current: string? mut = Path.get_full_path(directory)
+
+            while let candidate = current do
+                if Directory.exists(Path.combine(candidate, ".git")) \/ File.exists(Path.combine(candidate, ".git")) then
+                    return candidate
+                fi
+
+                current = Path.get_directory_name(candidate)
+            od
+
+            return null
+        si
+
+        _with_separator(directory: string) -> string static =>
+            if directory.ends_with('/') \/ directory.ends_with('\\') then directory else "{directory}/" fi
+    si
+si
