@@ -1,0 +1,41 @@
+namespace Tests is
+    use Collections.LIST
+
+    use Tester
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute
+
+    @TestClass()
+    class TEST_TARGET_Should is
+
+        init() is si
+
+        with_flags(flags: string) -> TEST => TEST("path", LIST[string](), flags, false, LIST[string]())
+
+        @Test()
+        TEST__is_wasm__given_target_wasm__is_true() is
+            should(with_flags("--target wasm").is_wasm()).be_true("", [])
+        si
+
+        @Test()
+        TEST__is_wasm__given_target_wasm_among_other_flags__is_true() is
+            should(with_flags("--library\n--target  wasm --wat il.out").is_wasm()).be_true("", [])
+        si
+
+        @Test()
+        TEST__is_wasm__given_target_dotnet__is_false() is
+            should(with_flags("--target dotnet").is_wasm()).be_false("", [])
+        si
+
+        @Test()
+        TEST__is_wasm__given_no_target__is_false() is
+            should(with_flags("--library").is_wasm()).be_false("", [])
+        si
+
+        @Test()
+        TEST__is_wasm__given_target_as_the_last_word__is_false() is
+            should(with_flags("--target").is_wasm()).be_false("", [])
+        si
+    si
+si

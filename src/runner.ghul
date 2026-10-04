@@ -192,7 +192,9 @@ namespace Tester is
                 return
             fi
 
-            _compiler_under_test.run_ln_runtime(self)
+            if !_test.is_wasm() then
+                _compiler_under_test.run_ln_runtime(self)
+            fi
 
             if !run_binary() then
                 return
@@ -269,14 +271,16 @@ namespace Tester is
                 return
             fi
 
-            // The formatted binary needs `ghul-runtime.dll` beside it just
+            // A .NET formatted binary needs `ghul-runtime.dll` beside it just
             // as the original does, and this phase runs before the point
-            // where the original's is linked.
-            _compiler_under_test.run_ln_runtime(self)
+            // where the original's is linked. A wasm one needs nothing.
+            if !_test.is_wasm() then
+                _compiler_under_test.run_ln_runtime(self)
+            fi
 
             let exit_status =
                 run(
-                    _target_cli,
+                    program_cli(),
                     run_command_line(COMPILER_UNDER_TEST.FORMATTED_BINARY),
                     PROGRAM_TIMEOUT_MS,
                     "formatted-run.out",
@@ -367,8 +371,23 @@ namespace Tester is
 
         // The command line for a run: the binary, then whatever `run.args`
         // holds.
+        // The program a test's binary is run with: the .NET host, or Node
+        // for a test built for the wasm target.
+        program_cli() -> string =>
+            if _test.is_wasm() then "node" else _target_cli fi
+
+        // A wasm test's program is started through the loader the compiler
+        // wrote beside its module, which has the module's name and the
+        // extension `.mjs`.
         run_command_line(binary: string) -> Collections.List[string] is
-            let command_line = Collections.LIST[string]([binary])
+            let program =
+                if _test.is_wasm() then
+                    Path.change_extension(binary, ".mjs") ?? binary
+                else
+                    binary
+                fi
+
+            let command_line = Collections.LIST[string]([program])
 
             command_line.add_range(program_arguments())
 
@@ -575,6 +594,7 @@ namespace Tester is
             if !_failure? then
                 delete_files([
                     "binary.exe",
+                    "binary.mjs",
                     "binary.exe.mdb",
                     "binary.runtimeconfig.json",
                     "compiler.out",
@@ -601,6 +621,7 @@ namespace Tester is
                     "format.err",
                     "format.diff",
                     "formatted.exe",
+                    "formatted.mjs",
                     "formatted.exe.mdb",
                     "formatted.runtimeconfig.json",
                     "formatted-compiler.out",
@@ -634,7 +655,7 @@ namespace Tester is
 
             let exit_status =
                 run(
-                    _target_cli,
+                    program_cli(),
                     // but this needs to be a path relative to the directory
                     // that the test is in
                     run_command_line(_compiler_under_test.get_binary_path_relative_to_test_folder(self)),
