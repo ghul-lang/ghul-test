@@ -45,6 +45,9 @@ namespace Tester is
         // what is built.
         _is_wasm: bool
 
+        // The project a ghul-cli test builds, or null for any other test.
+        project: PROJECT? => _test.project
+
         init(..) is
             _is_wasm =
                 _test.is_wasm() \/
@@ -97,7 +100,7 @@ namespace Tester is
         si
 
         _run_test() is
-            if _test.source_files |> count() == 0 then
+            if !_test.project? /\ _test.source_files |> count() == 0 then
                 add_fail("no source files found")
                 return
             fi
@@ -234,8 +237,8 @@ namespace Tester is
                 return
             fi
 
-            if _compiler_under_test.is_dotnet_build then
-                add_fail("format.expected is not supported under --use-dotnet-build")
+            if _compiler_under_test.is_dotnet_build \/ _compiler_under_test.is_ghul_cli then
+                add_fail("format.expected is not supported under --use-dotnet-build or --use-ghul-cli")
                 return
             fi
 

@@ -769,4 +769,48 @@ fi
 echo integration-tests/library-run-files: PASS
 
 
+echo integration-tests/project-tests...
+
+# A directory holding a ghul-project.json is built by ghul-cli, here the
+# local tool, and its program run from out/<target>/: the same expectation
+# files decide a project test as any other, so one program that runs and
+# one that does not build cover both halves.
+TEST_PROCESSES=1 CI=1 $RUNNER --use-ghul-cli --ghul "dotnet ghul" integration-tests/project-tests | tee actual-output
+
+if [ "${PIPESTATUS[0]}" != "0" ]; then
+    echo integration-tests/project-tests unexpectedly failed
+
+    exit 1
+fi
+
+if ! diff integration-tests/project-tests/expected-output actual-output ; then
+    echo integration-tests/project-tests output did not match expected output
+
+    exit 1
+fi
+
+echo integration-tests/project-tests: PASS
+
+
+echo integration-tests/project-tests-target...
+
+# --target picks which of a manifest's targets a project test is built for,
+# and a project that does not list it is not a test of that target.
+TEST_PROCESSES=1 CI=1 $RUNNER --use-ghul-cli --ghul "dotnet ghul" --target wasm integration-tests/project-tests | tee actual-output
+
+if [ "${PIPESTATUS[0]}" != "0" ]; then
+    echo integration-tests/project-tests-target unexpectedly failed
+
+    exit 1
+fi
+
+if ! grep -q "0 tests discovered" actual-output ; then
+    echo integration-tests/project-tests-target ran a project that does not list the target
+
+    exit 1
+fi
+
+echo integration-tests/project-tests-target: PASS
+
+
 exit 0

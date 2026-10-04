@@ -1,0 +1,100 @@
+namespace Tester is
+    use IO.File
+    use IO.Path
+
+    use System.Text.Json.JsonDocument
+    use System.Text.Json.JsonElement
+    use System.Text.Json.JsonValueKind
+
+    /// A test that is a `ghul-project.json` project, built by ghul-cli for
+    /// one target.
+    class PROJECT(name: string, target: string, is_library: bool) is
+        /// The file whose presence makes a directory a project test.
+        MANIFEST: string static => "ghul-project.json"
+
+        /// Whether the project is built for the wasm target, and so run by
+        /// Node.
+        is_wasm: bool => target =~ "wasm"
+
+        /// The built program, relative to the test directory: ghul-cli
+        /// writes a target's output to `out/<target>/`, named after the
+        /// project. A wasm program's loader sits beside the module.
+        binary_path_relative_to_test_folder: string =>
+            Path.join(["out", target, "{name}{if is_wasm then ".wasm" else ".exe" fi}"])
+
+        /// The project in `path`, built for `wanted_target` where that is
+        /// given and for its first target otherwise. Null, with the reason
+        /// in `problem`, where the manifest cannot be read or does not list
+        /// the target.
+        ///
+        /// - path: the test directory, holding the manifest
+        /// - wanted_target: the target the run asks for, or null
+        /// - problem: set to why the project cannot be tested, or null
+        read(path: string, wanted_target: string?, problem: string? ref) -> PROJECT? static is
+            problem! = null
+
+            let document = _parse(path, problem)
+
+            if !document? then
+                return null
+            fi
+
+            let root = document.root_element
+            let name = _string(root, "name")
+
+            if !name? then
+                problem! = "{MANIFEST} has no name"
+                return null
+            fi
+
+            let targets = Collections.LIST[string]()
+            let targets_element: JsonElement mut
+
+            if root.try_get_property("targets", targets_element ref) /\ targets_element.value_kind == JsonValueKind.ARRAY then
+                for element in targets_element.enumerate_array() do
+                    if let target = element.get_string() then
+                        targets.add(target)
+                    fi
+                od
+            fi
+
+            if targets.count == 0 then
+                problem! = "{MANIFEST} lists no targets"
+                return null
+            fi
+
+            let target mut = targets[0]
+
+            if let wanted: string = wanted_target then
+                if !targets.contains(wanted) then
+                    return null
+                fi
+
+                target = wanted
+            fi
+
+            let kind = _string(root, "kind")
+
+            return PROJECT(name, target, kind? /\ kind =~ "library")
+        si
+
+        _parse(path: string, problem: string? ref) -> JsonDocument? static is
+            try
+                return JsonDocument.parse(File.read_all_text(Path.join([path, MANIFEST])), _)
+            catch ex: System.Exception
+                problem! = "{MANIFEST} cannot be read: {ex.message}"
+                return null
+            yrt
+        si
+
+        _string(element: JsonElement, property: string) -> string? static is
+            let value: JsonElement mut
+
+            if element.try_get_property(property, value ref) /\ value.value_kind == JsonValueKind.STRING then
+                return value.get_string()
+            fi
+
+            return null
+        si
+    si
+si

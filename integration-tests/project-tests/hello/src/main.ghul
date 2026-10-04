@@ -1,0 +1,1 @@
+IO.Std.write_line("hello from a project")

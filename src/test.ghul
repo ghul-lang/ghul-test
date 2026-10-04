@@ -15,12 +15,12 @@ namespace Tester is
         // host error about a missing runtime configuration, which says
         // nothing about the test.
         is_library: bool =>
-            flags.split([' ', '\t', '\r', '\n']) |> any(f => f =~ "--library")
+            (project?.is_library ?? false) \/ flags.split([' ', '\t', '\r', '\n']) |> any(f => f =~ "--library")
 
         // A test built with `--target wasm` builds a WebAssembly module and
         // a JavaScript loader beside it, and its program is run by Node
         // through the loader rather than by the .NET host.
-        is_wasm() -> bool => names_wasm_target(flags)
+        is_wasm() -> bool => (project?.is_wasm ?? false) \/ names_wasm_target(flags)
 
         // Whether `options`, compiler options as a command line or a
         // project file holds them, select the wasm target.
@@ -39,6 +39,10 @@ namespace Tester is
         has_executed: bool => result? /\ result.is_executed
         has_passed: bool => result? /\ result.is_pass
         has_failed: bool => result? /\ result.is_fail
+
+        // Set for a test that is a ghul-cli project: what is built, and for
+        // which target.
+        project: PROJECT? public
 
         result: Result? public
 

@@ -8,6 +8,13 @@
         "ghul-compiler"
       ],
       "rollForward": false
+    },
+    "ghul.cli": {
+      "version": "0.46.0",
+      "commands": [
+        "ghul"
+      ],
+      "rollForward": false
     }
   }
 }

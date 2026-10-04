@@ -24,10 +24,10 @@ namespace Tester is
 
         _tests: MutableList[TEST]
 
-        // Directories that look like a test - a `test.ghul`, or an expected
-        // snapshot - but have no `ghulflags`, which is what makes a directory
-        // a test. Nothing would run them, so they are reported rather than
-        // passed over.
+        // Why directories that look like a test were not run: a `test.ghul`
+        // or an expected snapshot without the file that makes a directory a
+        // test, or a project whose manifest cannot be tested. Nothing would
+        // run them, so they are reported rather than passed over.
         _undiscovered: MutableList[string]
 
         undiscovered: Iterable[string] => _undiscovered
@@ -145,13 +145,31 @@ namespace Tester is
 
         try_queue_test(path: string) is
             let flags_path = "{path}/ghulflags"
+            let marker = if _compiler_under_test.is_ghul_cli then PROJECT.MANIFEST else "ghulflags" fi
 
-            if !File.exists(flags_path) then
+            if !File.exists("{path}/{marker}") then
                 if looks_like_test(path) then
-                    _undiscovered.add(path)
+                    _undiscovered.add("{path} looks like a test but has no {marker}")
                 fi
 
                 return
+            fi
+
+            let project: PROJECT? mut = null
+
+            if _compiler_under_test.is_ghul_cli then
+                let problem: string? mut = null
+
+                project = PROJECT.read(path, _compiler_under_test.project_target, problem ref)
+
+                if let reason = problem then
+                    _undiscovered.add("{path}: {reason}")
+                    return
+                fi
+
+                if !project? then
+                    return
+                fi
             fi
 
             let tags = get_tags(path)
@@ -168,11 +186,11 @@ namespace Tester is
                 return
             fi
 
-            let flags = File.read_all_text(flags_path)
+            let flags = if File.exists(flags_path) then File.read_all_text(flags_path) else "" fi
             let source_files = get_source_files(path)
             let is_build_failure_expected = File.exists("{path}/fail.expected")
 
-            queue_test(
+            let test =
                 TEST(
                     path,
                     source_files,
@@ -180,7 +198,10 @@ namespace Tester is
                     is_build_failure_expected,
                     tags
                 )
-            )
+
+            test.project = project
+
+            queue_test(test)
         si
 
         looks_like_test(path: string) -> bool =>
