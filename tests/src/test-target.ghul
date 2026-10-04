@@ -37,5 +37,47 @@ namespace Tests is
         TEST__is_wasm__given_target_as_the_last_word__is_false() is
             should(with_flags("--target").is_wasm()).be_false("", [])
         si
+
+        @Test()
+        PROJECT_OPTIONS__options_in__given_a_project_with_ghul_options__is_their_value() is
+            let project = "<Project>\n  <PropertyGroup>\n    <GhulOptions>--target wasm</GhulOptions>\n  </PropertyGroup>\n</Project>"
+
+            should(TEST.names_wasm_target(PROJECT_OPTIONS.options_in(project))).be_true("", [])
+        si
+
+        @Test()
+        PROJECT_OPTIONS__options_in__given_several_ghul_options__joins_them() is
+            let project = "<Project><GhulOptions>--library</GhulOptions><GhulOptions>--target wasm</GhulOptions></Project>"
+
+            should(TEST.names_wasm_target(PROJECT_OPTIONS.options_in(project))).be_true("", [])
+        si
+
+        @Test()
+        PROJECT_OPTIONS__options_in__given_no_ghul_options__names_no_wasm_target() is
+            let project = "<Project><PropertyGroup><OutputType>Exe</OutputType></PropertyGroup></Project>"
+
+            should(TEST.names_wasm_target(PROJECT_OPTIONS.options_in(project))).be_false("", [])
+        si
+
+        @Test()
+        PROJECT_OPTIONS__options_in__given_a_malformed_project__names_no_wasm_target() is
+            let project = "<GhulOptions>--target wasm"
+
+            should(TEST.names_wasm_target(PROJECT_OPTIONS.options_in(project))).be_false("", [])
+        si
+
+        @Test()
+        PROJECT_OPTIONS__options_in__given_a_ghul_options_item__reads_its_include() is
+            let project = "<Project><ItemGroup><GhulOptions Include=\"--target wasm\" /></ItemGroup></Project>"
+
+            should(TEST.names_wasm_target(PROJECT_OPTIONS.options_in(project))).be_true("", [])
+        si
+
+        @Test()
+        PROJECT_OPTIONS__options_in__given_a_project_in_the_msbuild_namespace__reads_its_options() is
+            let project = "<Project xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\"><PropertyGroup><GhulOptions>--target wasm</GhulOptions></PropertyGroup></Project>"
+
+            should(TEST.names_wasm_target(PROJECT_OPTIONS.options_in(project))).be_true("", [])
+        si
     si
 si

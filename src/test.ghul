@@ -20,8 +20,12 @@ namespace Tester is
         // A test built with `--target wasm` builds a WebAssembly module and
         // a JavaScript loader beside it, and its program is run by Node
         // through the loader rather than by the .NET host.
-        is_wasm() -> bool is
-            let words = flags.split([' ', '\t', '\r', '\n']) |> filter(w => w.length > 0) |> collect()
+        is_wasm() -> bool => names_wasm_target(flags)
+
+        // Whether `options`, compiler options as a command line or a
+        // project file holds them, select the wasm target.
+        names_wasm_target(options: string) -> bool static is
+            let words = options.split([' ', '\t', '\r', '\n']) |> filter(w => w.length > 0) |> collect()
 
             for i in 0..words.count - 1 do
                 if words[i] =~ "--target" /\ words[i + 1] =~ "wasm" then
