@@ -17,6 +17,21 @@ namespace Tester is
         is_library: bool =>
             flags.split([' ', '\t', '\r', '\n']) |> any(f => f =~ "--library")
 
+        // A test built with `--target wasm` builds a WebAssembly module and
+        // a JavaScript loader beside it, and its program is run by Node
+        // through the loader rather than by the .NET host.
+        is_wasm() -> bool is
+            let words = flags.split([' ', '\t', '\r', '\n']) |> filter(w => w.length > 0) |> collect()
+
+            for i in 0..words.count - 1 do
+                if words[i] =~ "--target" /\ words[i + 1] =~ "wasm" then
+                    return true
+                fi
+            od
+
+            return false
+        si
+
         has_executed: bool => result? /\ result.is_executed
         has_passed: bool => result? /\ result.is_pass
         has_failed: bool => result? /\ result.is_fail
