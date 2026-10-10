@@ -18,7 +18,7 @@ namespace Tester is
             Std.output_encoding = UTF8Encoding()
 
             if arguments.count == 0 then
-                Std.write_line("usage: ghul-test [--tag <name>]... [--not-tag <name>]... [--shard <index>/<count>] <test-folder>...")
+                Std.write_line("usage: ghul-test [--ci|--no-ci] [--tag <name>]... [--not-tag <name>]... [--shard <index>/<count>] <test-folder>...")
                 return 1
             fi
 
@@ -29,6 +29,13 @@ namespace Tester is
 
             let ci_string =
                 System.Environment.get_environment_variable("CI") ?? ""
+
+            // `--ci` and `--no-ci` say outright which of the two the
+            // environment variable would have chosen, for the case where the
+            // environment says the wrong thing: a job that publishes a
+            // compiler to run against is in CI, but wants the published one
+            // rather than the tool. With neither, the environment decides.
+            let ci_forced mut = -1
 
             let run_mode mut =
                 if ci_string =~ "1" \/ ci_string.to_lower() =~ "true" then
@@ -64,6 +71,22 @@ namespace Tester is
                     run_mode = CompilerRunMode.DOTNET
                 elif arg =~ "--use-ghul-cli" then
                     run_mode = CompilerRunMode.GHUL_CLI
+                elif arg =~ "--ci" then
+                    if ci_forced == 0 then
+                        Std.write_line("--ci and --no-ci cannot both be given")
+                        return 1
+                    fi
+
+                    ci_forced = 1
+                    run_mode = CompilerRunMode.CI
+                elif arg =~ "--no-ci" then
+                    if ci_forced == 1 then
+                        Std.write_line("--ci and --no-ci cannot both be given")
+                        return 1
+                    fi
+
+                    ci_forced = 0
+                    run_mode = CompilerRunMode.LOCAL
                 elif arg =~ "--ghul" then
                     i = i + 1
 
