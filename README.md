@@ -69,7 +69,7 @@ rather than passing quietly.
 ## Command Line Usage
 
 ```text
-ghul-test [--use-dotnet-build | --use-ghul-cli [--ghul <command>] [--target <name>]] [--compiler <command>] [--runtime-dll <path>] [--ildasm <path>] [--tag <name>]... [--not-tag <name>]... [--shard <index>/<count>] <test-folder> [...]
+ghul-test [--use-dotnet-build | --use-ghul-cli [--ghul <command>] [--target <name>]] [--ci | --no-ci] [--compiler <command>] [--runtime-dll <path>] [--ildasm <path>] [--tag <name>]... [--not-tag <name>]... [--shard <index>/<count>] <test-folder> [...]
 ```
 
 - `--use-dotnet-build` – expects each test folder to be an MSBuild project. For ghūl projects the file should end with `.ghulproj`. The runner builds the project with `dotnet build` instead of invoking the compiler directly.
@@ -77,6 +77,7 @@ ghul-test [--use-dotnet-build | --use-ghul-cli [--ghul <command>] [--target <nam
 - `--ghul <command>` – the command that runs ghul-cli under `--use-ghul-cli`: `ghul` unless given, `dotnet ghul` for a local tool. Words are split on spaces.
 - `--target <name>` – the target each project is built for under `--use-ghul-cli`. A project whose manifest does not list it is not a test of that target, and is passed over. Without it, each project is built for the first target its manifest lists.
 - `--compiler <command>` – the command each test project is built with, supplied to MSBuild as the `GhulCompiler` property. A command containing no spaces must name an existing file; anything with arguments in it, such as `dotnet /path/to/ghul.dll`, is passed through as written. Takes precedence over the `GHUL_TEST_COMPILER` environment variable and over the publish directory described below. Only meaningful under `--use-dotnet-build` — the other modes invoke the compiler directly and resolve it themselves — so supplying it elsewhere is an error.
+- `--ci` / `--no-ci` – take the compiler from the `ghul-compiler` tool (`--ci`) or from a `publish` directory at or above the working directory (`--no-ci`), instead of letting the `CI` environment variable decide. Useful for a CI job that is in CI but wants to run against a compiler it published itself, such as one published as Native AOT. The two cannot both be given. With neither, the `CI` environment variable decides, as it always has.
 - `--runtime-dll <path>` – use the supplied `ghul-runtime.dll` for compiled test binaries instead of the version that ships with `ghul-test`. The path must point to an existing file. Takes precedence over the `GHUL_RUNTIME_DLL` environment variable. Has no effect under `--use-dotnet-build`, which resolves the runtime via the test project's own `PackageReference`.
 - `--ildasm <path>` – the disassembler used to produce `il.out` for tests carrying an `il.expected`. The path must point to an existing file. Takes precedence over the `GHUL_TEST_ILDASM` environment variable and over the copy that ships beside `ghul-test`.
 - `--tag <name>` – restrict discovery to tests whose `tags` file contains at least one of the given names. Repeatable; the requested tags are matched as a union (a test runs if it carries *any* of them), not an intersection. A test with no `tags` file is excluded whenever any `--tag` is given. Omit entirely to run every discovered test regardless of tags, which is unchanged from before this flag existed.
@@ -87,7 +88,7 @@ ghul-test [--use-dotnet-build | --use-ghul-cli [--ghul <command>] [--target <nam
 Environment variables influence behaviour:
 
 - `HOST` and `TARGET` – specify the CLI used to run the compiler and the compiled binary (default `dotnet`).
-- `CI` – when set to `1` or `true`, enables CI mode. In this mode `ghul-runtime.dll` is taken from the test runner's own location unless overridden by `--runtime-dll` / `GHUL_RUNTIME_DLL`.
+- `CI` – when set to `1` or `true`, enables CI mode, unless `--ci` or `--no-ci` says otherwise. In this mode `ghul-runtime.dll` is taken from the test runner's own location unless overridden by `--runtime-dll` / `GHUL_RUNTIME_DLL`.
 - `GHUL_RUNTIME_DLL` – path to a `ghul-runtime.dll` to use for compiled test binaries, overriding the version that ships with `ghul-test`. Equivalent to passing `--runtime-dll`; the CLI flag wins if both are set.
 - `GHUL_TEST_COMPILER` – command each test project is built with under `--use-dotnet-build`. Equivalent to passing `--compiler`; the CLI flag wins if both are set.
 - `TEST_PROCESSES` – number of worker processes to use. If unset, a value derived from CPU count is used.
