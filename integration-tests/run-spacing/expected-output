@@ -1,0 +1,12 @@
+using 1 processes to run tests
+ 0% ❌ fail: integration-tests/run-spacing/exact: test output:
+    1c1
+    < [ aligned]
+    ---
+    > [  aligned]
+    
+50% ✅ pass: integration-tests/run-spacing/ignored
+2 tests discovered
+2 tests enabled
+1/2 tests passed
+❌ 1 tests failed ❌

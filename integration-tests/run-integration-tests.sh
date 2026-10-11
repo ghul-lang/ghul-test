@@ -502,6 +502,27 @@ fi
 echo integration-tests/run-stderr-fail: PASS
 
 
+echo integration-tests/run-spacing...
+
+# Run output is compared exactly, so a test whose output is off by one space
+# fails, and passes only where it carries ignore-space.
+TEST_PROCESSES=1 $RUNNER integration-tests/run-spacing | tee actual-output
+
+if [ "${PIPESTATUS[0]}" != "1" ]; then
+    echo integration-tests/run-spacing unexpectedly succeeded
+
+    exit 1
+fi
+
+if ! diff integration-tests/run-spacing/expected-output actual-output ; then
+    echo integration-tests/run-spacing output did not match expected output
+
+    exit 1
+fi
+
+echo integration-tests/run-spacing: PASS
+
+
 echo integration-tests/run-exit...
 
 # A test carrying run.exit.expected passes when the program ends with that
