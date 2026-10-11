@@ -59,7 +59,7 @@ namespace Tests is
         si
 
         get_mock_COMPILER_UNDER_TEST(run_mode: CompilerRunMode) -> COMPILER_UNDER_TEST is
-            return NSubstitute.Substitute.`for`[COMPILER_UNDER_TEST]([run_mode, ""]: object)
+            return NSubstitute.Substitute.`for`[COMPILER_UNDER_TEST]([run_mode, "", null]: object)
         si
 
         get_mock_TEST() -> TEST is

@@ -18,7 +18,12 @@ namespace Tester is
         GHUL_CLI
     si
 
-    class COMPILER_UNDER_TEST(run_mode: CompilerRunMode private, publish_directory: string? private) is
+    // - run_mode: how the compiler is reached
+    // - publish_directory: where a published compiler and its runtime are
+    // - published_command: the command a published compiler is run with, as a
+    //   configuration naming its path gives it, or null to run the `ghul`
+    //   launcher the publish directory holds
+    class COMPILER_UNDER_TEST(run_mode: CompilerRunMode private, publish_directory: string? private, published_command: string? private) is
         _publish: string
         _executable: string
         _runtime_path: string
@@ -52,10 +57,20 @@ namespace Tester is
                     _publish = find_publish_directory()
                 fi
 
-                _executable = find_published_compiler()
                 _runtime_path = get_published_compiler_path("ghul-runtime.dll")
                 _sdk_reference_path = discover_sdk_reference_path()
-                _arguments = ["--v3", "--test-run"]
+
+                if let command = _published_command then
+                    let words = LIST[string](command.split([' ']) |> filter(word => word.length > 0))
+
+                    _executable = words[0]
+                    words.remove_at(0)
+                    words.add_range(["--v3", "--test-run"])
+                    _arguments = words
+                else
+                    _executable = find_published_compiler()
+                    _arguments = ["--v3", "--test-run"]
+                fi
             else
                 throw Exception("unknown run mode: {_run_mode}")
             fi

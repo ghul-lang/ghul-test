@@ -226,6 +226,7 @@ namespace Tester is
             od
 
             let publish_directory: string? mut = null
+            let published_command: string? mut = null
             let run_targets: Collections.List[TestTarget]? mut = null
 
             let configuration_file = RUN_CONFIGURATION.find_file(Directory.get_current_directory())
@@ -289,10 +290,12 @@ namespace Tester is
 
                 if configuration.build =~ "compiler" then
                     publish_directory = configuration.publish_directory
+                    published_command = configuration.compiler_command
                     compiler_override = null
 
                     if let named = compiler_option then
                         publish_directory = COMPILER_OPTION.publish_directory_of(named)
+                        published_command = null
                         run_mode = CompilerRunMode.LOCAL
                     fi
                 else
@@ -311,7 +314,7 @@ namespace Tester is
                 run_mode = mode
             fi
 
-            let compiler_under_test = COMPILER_UNDER_TEST(run_mode, publish_directory)
+            let compiler_under_test = COMPILER_UNDER_TEST(run_mode, publish_directory, published_command)
 
             let disassembler: DISASSEMBLER mut
 
