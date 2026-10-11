@@ -14,70 +14,95 @@ namespace Tests is
         with_flags(flags: string) -> TEST => TEST("path", LIST[string](), flags, false, LIST[string]())
 
         @Test()
-        TEST__is_wasm__given_target_wasm__is_true() is
-            should(with_flags("--target wasm").is_wasm()).be_true("", [])
+        TEST__target__given_target_wasm__is_wasm() is
+            should(with_flags("--target wasm").target() =~ TestTarget.WASM).be_true("", [])
         si
 
         @Test()
-        TEST__is_wasm__given_target_wasm_among_other_flags__is_true() is
-            should(with_flags("--library\n--target  wasm --wat il.out").is_wasm()).be_true("", [])
+        TEST__target__given_target_wasm_among_other_flags__is_wasm() is
+            should(with_flags("--library\n--target  wasm --wat il.out").target() =~ TestTarget.WASM).be_true("", [])
         si
 
         @Test()
-        TEST__is_wasm__given_target_dotnet__is_false() is
-            should(with_flags("--target dotnet").is_wasm()).be_false("", [])
+        TEST__target__given_target_dotnet__is_not_wasm() is
+            should(with_flags("--target dotnet").target() =~ TestTarget.WASM).be_false("", [])
         si
 
         @Test()
-        TEST__is_wasm__given_no_target__is_false() is
-            should(with_flags("--library").is_wasm()).be_false("", [])
+        TEST__target__given_no_target__is_not_wasm() is
+            should(with_flags("--library").target() =~ TestTarget.WASM).be_false("", [])
         si
 
         @Test()
-        TEST__is_wasm__given_target_as_the_last_word__is_false() is
-            should(with_flags("--target").is_wasm()).be_false("", [])
+        TEST__target__given_target_as_the_last_word__is_not_wasm() is
+            should(with_flags("--target").target() =~ TestTarget.WASM).be_false("", [])
+        si
+
+        @Test()
+        TEST__target__given_target_llvm__is_llvm() is
+            should(with_flags("--target llvm").target() =~ TestTarget.LLVM).be_true("", [])
+        si
+
+        @Test()
+        TEST__target__given_a_target_it_cannot_run__is_dotnet() is
+            should(with_flags("--target riscv").target() =~ TestTarget.DOTNET).be_true("", [])
+        si
+
+        @Test()
+        PROJECT__test_target__given_llvm__is_llvm() is
+            should(PROJECT("hello", "llvm", false).test_target =~ TestTarget.LLVM).be_true("", [])
+        si
+
+        @Test()
+        PROJECT__binary_path__given_llvm__has_no_extension() is
+            should(PROJECT("hello", "llvm", false).binary_path_relative_to_test_folder =~ IO.Path.join(["out", "llvm", "hello"])).be_true("", [])
+        si
+
+        @Test()
+        PROJECT__binary_path__given_wasm__is_the_module() is
+            should(PROJECT("hello", "wasm", false).binary_path_relative_to_test_folder =~ IO.Path.join(["out", "wasm", "hello.wasm"])).be_true("", [])
         si
 
         @Test()
         PROJECT_OPTIONS__options_in__given_a_project_with_ghul_options__is_their_value() is
             let project = "<Project>\n  <PropertyGroup>\n    <GhulOptions>--target wasm</GhulOptions>\n  </PropertyGroup>\n</Project>"
 
-            should(TEST.names_wasm_target(PROJECT_OPTIONS.options_in(project))).be_true("", [])
+            should(TEST.named_target(PROJECT_OPTIONS.options_in(project)) =~ TestTarget.WASM).be_true("", [])
         si
 
         @Test()
         PROJECT_OPTIONS__options_in__given_several_ghul_options__joins_them() is
             let project = "<Project><GhulOptions>--library</GhulOptions><GhulOptions>--target wasm</GhulOptions></Project>"
 
-            should(TEST.names_wasm_target(PROJECT_OPTIONS.options_in(project))).be_true("", [])
+            should(TEST.named_target(PROJECT_OPTIONS.options_in(project)) =~ TestTarget.WASM).be_true("", [])
         si
 
         @Test()
         PROJECT_OPTIONS__options_in__given_no_ghul_options__names_no_wasm_target() is
             let project = "<Project><PropertyGroup><OutputType>Exe</OutputType></PropertyGroup></Project>"
 
-            should(TEST.names_wasm_target(PROJECT_OPTIONS.options_in(project))).be_false("", [])
+            should(TEST.named_target(PROJECT_OPTIONS.options_in(project)) =~ TestTarget.WASM).be_false("", [])
         si
 
         @Test()
         PROJECT_OPTIONS__options_in__given_a_malformed_project__names_no_wasm_target() is
             let project = "<GhulOptions>--target wasm"
 
-            should(TEST.names_wasm_target(PROJECT_OPTIONS.options_in(project))).be_false("", [])
+            should(TEST.named_target(PROJECT_OPTIONS.options_in(project)) =~ TestTarget.WASM).be_false("", [])
         si
 
         @Test()
         PROJECT_OPTIONS__options_in__given_a_ghul_options_item__reads_its_include() is
             let project = "<Project><ItemGroup><GhulOptions Include=\"--target wasm\" /></ItemGroup></Project>"
 
-            should(TEST.names_wasm_target(PROJECT_OPTIONS.options_in(project))).be_true("", [])
+            should(TEST.named_target(PROJECT_OPTIONS.options_in(project)) =~ TestTarget.WASM).be_true("", [])
         si
 
         @Test()
         PROJECT_OPTIONS__options_in__given_a_project_in_the_msbuild_namespace__reads_its_options() is
             let project = "<Project xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\"><PropertyGroup><GhulOptions>--target wasm</GhulOptions></PropertyGroup></Project>"
 
-            should(TEST.names_wasm_target(PROJECT_OPTIONS.options_in(project))).be_true("", [])
+            should(TEST.named_target(PROJECT_OPTIONS.options_in(project)) =~ TestTarget.WASM).be_true("", [])
         si
     si
 si

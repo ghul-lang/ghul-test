@@ -37,6 +37,11 @@ namespace Tester is
             // rather than the tool. With neither, the environment decides.
             let ci_forced mut = -1
 
+            // The mode `--use-dotnet-build` or `--use-ghul-cli` asks for, which
+            // takes the compiler from the build rather than from either source
+            // `--ci` and `--no-ci` choose between.
+            let build_mode: CompilerRunMode? mut = null
+
             let run_mode mut =
                 if ci_string =~ "1" \/ ci_string.to_lower() =~ "true" then
                     CompilerRunMode.CI
@@ -68,9 +73,9 @@ namespace Tester is
                 let arg = arguments[i]
 
                 if arg =~ "--use-dotnet-build" then
-                    run_mode = CompilerRunMode.DOTNET
+                    build_mode = CompilerRunMode.DOTNET
                 elif arg =~ "--use-ghul-cli" then
-                    run_mode = CompilerRunMode.GHUL_CLI
+                    build_mode = CompilerRunMode.GHUL_CLI
                 elif arg =~ "--ci" then
                     if ci_forced == 0 then
                         Std.write_line("--ci and --no-ci cannot both be given")
@@ -165,6 +170,15 @@ namespace Tester is
 
                 i = i + 1
             od
+
+            if let mode = build_mode then
+                if ci_forced >= 0 then
+                    Std.write_line("--ci and --no-ci cannot be given with --use-dotnet-build or --use-ghul-cli, which take the compiler from the build")
+                    return 1
+                fi
+
+                run_mode = mode
+            fi
 
             let compiler_under_test = COMPILER_UNDER_TEST(run_mode)
 

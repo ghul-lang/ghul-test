@@ -1,0 +1,31 @@
+namespace Tester is
+    /// What a test's program is built for, which says how it is run.
+    enum TestTarget is
+        /// A .NET assembly, run by the .NET host.
+        DOTNET,
+
+        /// A WebAssembly module, run by Node through the loader the
+        /// compiler writes beside it.
+        WASM,
+
+        /// A native executable, run directly.
+        LLVM
+    si
+
+    /// Reading a target from the name a compiler option or a project
+    /// manifest gives it.
+    class TEST_TARGETS is
+        /// The target `name` names, or null where it names none ghul-test
+        /// knows how to run.
+        of(name: string) -> TestTarget? static =>
+            if name =~ "dotnet" then
+                TestTarget.DOTNET
+            elif name =~ "wasm" then
+                TestTarget.WASM
+            elif name =~ "llvm" then
+                TestTarget.LLVM
+            else
+                null
+            fi
+    si
+si
