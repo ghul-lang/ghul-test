@@ -1,0 +1,6 @@
+entry() is
+    IO.Std.write_line("hello, world")
+
+    @IF.extra()
+    IO.Std.write_line("with extra flags")
+si

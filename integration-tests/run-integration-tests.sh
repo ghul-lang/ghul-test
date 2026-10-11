@@ -921,4 +921,24 @@ fi
 
 echo integration-tests/targets-file-flags: PASS
 
+echo integration-tests/target-flags...
+
+# --target-flags adds flags to every run a targets file produces for that
+# target: the test prints a second line only when built with --define extra.
+TEST_PROCESSES=1 CI=1 $RUNNER --target-flags dotnet "--define extra" integration-tests/target-flags | tee actual-output
+
+if [ "${PIPESTATUS[0]}" != "0" ]; then
+    echo integration-tests/target-flags failed
+
+    exit 1
+fi
+
+if ! grep -q "pass: integration-tests/target-flags/hello\[dotnet\]" actual-output ; then
+    echo integration-tests/target-flags did not pass the test with the extra flags
+
+    exit 1
+fi
+
+echo integration-tests/target-flags: PASS
+
 exit 0

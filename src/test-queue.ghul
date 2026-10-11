@@ -18,7 +18,8 @@ namespace Tester is
         disassembler: DISASSEMBLER private,
         progress_reporter: PROGRESS_REPORTER private,
         tag_filter: TAG_FILTER private,
-        shard: SHARD private
+        shard: SHARD private,
+        target_flags: Collections.Map[string, string] private
     ) is
         _task_queue: TASK_QUEUE
 
@@ -219,6 +220,11 @@ namespace Tester is
             queue_test(test)
         si
 
+        // The flags --target-flags gives for runs under `target`, with a
+        // leading space so they append to a command line, or nothing.
+        extra_flags(target: string) -> string =>
+            if _target_flags.contains_key(target) then " {_target_flags[target]}" else "" fi
+
         looks_like_test(path: string) -> bool =>
             File.exists("{path}/test.ghul") \/
             Directory.get_files(path, "*.expected").count > 0
@@ -309,7 +315,7 @@ namespace Tester is
                     TEST(
                         directory,
                         get_source_files(directory),
-                        "{flags.trim()} --target {target}",
+                        "{flags.trim()} --target {target}{extra_flags(target)}",
                         File.exists("{directory}/fail.expected"),
                         tags
                     )
