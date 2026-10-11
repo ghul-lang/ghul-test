@@ -170,6 +170,39 @@ namespace Tests is
         si
 
         @Test()
+        RUN_CONFIGURATION__read__given_run_targets__reads_the_targets_and_lets_an_extension_replace_them() is
+            let file = a_file(
+                "{{ \"configurations\": {{ "
+                "\"local\": {{ \"compiler\": {{ \"publish\": \"publish\" }}, \"run_targets\": [\"dotnet\", \"wasm\"] }}, "
+                "\"llvm\": {{ \"extends\": \"local\", \"run_targets\": [\"llvm\"] }} }} }}")
+
+            let local = RUN_CONFIGURATION.read(file, "local").run_targets!
+
+            should(local.count).be(2, "", [])
+            should(local[0] == TestTarget.DOTNET).be_true("", [])
+            should(local[1] == TestTarget.WASM).be_true("", [])
+
+            let llvm = RUN_CONFIGURATION.read(file, "llvm").run_targets!
+
+            should(llvm.count).be(1, "", [])
+            should(llvm[0] == TestTarget.LLVM).be_true("", [])
+        si
+
+        @Test()
+        RUN_CONFIGURATION__read__given_no_run_targets__covers_every_target() is
+            let file = a_file("{{ \"configurations\": {{ \"local\": {{ \"compiler\": {{ \"publish\": \"publish\" }} }} }} }}")
+
+            should(RUN_CONFIGURATION.read(file, "local").run_targets?).be_false("", [])
+        si
+
+        @Test()
+        RUN_CONFIGURATION__read__given_an_unknown_run_target__says_so() is
+            let file = a_file("{{ \"configurations\": {{ \"local\": {{ \"compiler\": {{ \"publish\": \"publish\" }}, \"run_targets\": [\"cobol\"] }} }} }}")
+
+            should(read_problem(file, "local")).contain("run_targets names cobol", "", [])
+        si
+
+        @Test()
         RUN_CONFIGURATION__find_file__finds_the_file_in_a_directory_above() is
             let file = a_file("{{ \"configurations\": {{ }} }}")
             let below = Path.join([Path.get_directory_name(file)!, "a", "b"])

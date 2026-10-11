@@ -59,6 +59,10 @@ namespace Tester is
         /// library sources included.
         target_flags: MAP[string, string]
 
+        /// The targets the run covers, or null for every target: a test, or a
+        /// variant of one, built for any other is passed over.
+        run_targets: LIST[TestTarget]?
+
         init(name: string) is
             self.name = name
             build = "compiler"
@@ -173,6 +177,28 @@ namespace Tester is
 
             if let target = string_property(entry, "ghul_target") then
                 ghul_target = target
+            fi
+
+            let run_targets: JsonElement mut
+
+            if entry.try_get_property("run_targets", run_targets ref) then
+                if run_targets.value_kind != JsonValueKind.ARRAY then
+                    throw Exception("{file}: {name}: run_targets must be an array of target names")
+                fi
+
+                let covered = LIST[TestTarget]()
+
+                for element in run_targets.enumerate_array() do
+                    let target_name = if element.value_kind == JsonValueKind.STRING then element.get_string() ?? "" else "" fi
+
+                    if let target = TEST_TARGETS.of(target_name) then
+                        covered.add(target)
+                    else
+                        throw Exception("{file}: {name}: run_targets names {target_name}, which is not a target ghul-test can run")
+                    fi
+                od
+
+                self.run_targets = covered
             fi
 
             let targets: JsonElement mut
