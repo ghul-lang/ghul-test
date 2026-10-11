@@ -988,6 +988,22 @@ expect_configuration_pass "default" tests
 expect_configuration_pass "extended" --config extended tests
 expect_configuration_pass "target flags" --config with-target-flags ../target-flags
 
+expect_configuration_pass "run targets, passing a test over" --config wasm-only tests
+
+if ! grep -q "1 tests passed over for targets the configuration does not run" actual-output ; then
+    echo integration-tests/configurations: run targets did not pass the dotnet test over
+    exit 1
+fi
+
+expect_configuration_pass "run targets, keeping a variant" --config dotnet-only ../targets-file
+
+if ! grep -q "pass: ../targets-file/hello\[dotnet\]" actual-output ; then
+    echo integration-tests/configurations: run targets did not keep the dotnet variant
+    exit 1
+fi
+
+expect_configuration_problem "unknown run target" "run_targets names cobol" --config unknown-target tests
+
 expect_configuration_problem "unknown" "has no configuration named nightly" --config nightly tests
 expect_configuration_problem "incomplete" "names its runtime" --config no-runtime tests
 expect_configuration_problem "with --ci" "cannot be given with an option the configuration sets" --config tool --ci tests

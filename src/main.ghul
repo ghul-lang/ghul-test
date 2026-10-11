@@ -226,6 +226,7 @@ namespace Tester is
             od
 
             let publish_directory: string? mut = null
+            let run_targets: Collections.List[TestTarget]? mut = null
 
             let configuration_file = RUN_CONFIGURATION.find_file(Directory.get_current_directory())
 
@@ -279,6 +280,8 @@ namespace Tester is
                 ildasm_override = ildasm_override ?? configuration.ildasm
                 ghul_command = configuration.ghul_command
                 project_target = configuration.ghul_target
+
+                run_targets = configuration.run_targets
 
                 for (target, flags) in configuration.target_flags do
                     target_flags[target] = flags
@@ -371,6 +374,8 @@ namespace Tester is
                     shard,
                     target_flags)
 
+            queue.run_targets = run_targets
+
             for path in requested.paths do
                 if !Directory.exists(path) then
                     Std.write_line("not a directory: {path}")
@@ -390,6 +395,11 @@ namespace Tester is
                     "for {shard.description}")
             fi
             Std.write_line("{queue.executed_count} tests enabled")
+
+            if queue.passed_over_count > 0 then
+                Std.write_line("{queue.passed_over_count} tests passed over for targets the configuration does not run")
+            fi
+
             Std.write_line("{queue.pass_count}/{queue.executed_count} tests passed")
 
             for reason in queue.undiscovered do

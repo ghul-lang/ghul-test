@@ -14,6 +14,18 @@
             "extends": "tool",
             "targets": { "dotnet": { "flags": "--define extra" } }
         },
+        "wasm-only": {
+            "extends": "tool",
+            "run_targets": ["wasm"]
+        },
+        "dotnet-only": {
+            "extends": "tool",
+            "run_targets": ["dotnet"]
+        },
+        "unknown-target": {
+            "extends": "tool",
+            "run_targets": ["cobol"]
+        },
         "no-runtime": {
             "compiler": "tool"
         }

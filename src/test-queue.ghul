@@ -34,6 +34,17 @@ namespace Tester is
         undiscovered: Iterable[string] => _undiscovered
         undiscovered_count: int => _undiscovered.count
 
+        /// The targets the run covers, or null for every target. A test, or a
+        /// variant of one, built for another target is passed over.
+        run_targets: Collections.List[TestTarget]? public
+
+        /// How many tests and variants were passed over for a target the run
+        /// does not cover.
+        passed_over_count: int
+
+        _covers(target: TestTarget) -> bool =>
+            if let targets = run_targets then targets |> any(t => t == target) else true fi
+
         // Counts every test that survives the tag filter, so a shard
         // selects the same tests however the run is divided.
         _candidate_ordinal: int
@@ -182,6 +193,13 @@ namespace Tester is
                 return
             fi
 
+            let flags = if File.exists(flags_path) then File.read_all_text(flags_path) else "" fi
+
+            if !TARGET_VARIANTS.has(path) /\ !_covers(project?.test_target ?? TEST.named_target(flags) ?? TestTarget.DOTNET) then
+                passed_over_count = passed_over_count + 1
+                return
+            fi
+
             let ordinal = _candidate_ordinal
 
             _candidate_ordinal = _candidate_ordinal + 1
@@ -190,7 +208,6 @@ namespace Tester is
                 return
             fi
 
-            let flags = if File.exists(flags_path) then File.read_all_text(flags_path) else "" fi
             let source_files = get_source_files(path)
             let is_build_failure_expected = File.exists("{path}/fail.expected")
 
@@ -309,6 +326,11 @@ namespace Tester is
             fi
 
             for target in targets do
+                if !_covers(TEST_TARGETS.of(target) ?? TestTarget.DOTNET) then
+                    passed_over_count = passed_over_count + 1
+                    continue
+                fi
+
                 let directory = TARGET_VARIANTS.materialize(path, target)
 
                 let test =
