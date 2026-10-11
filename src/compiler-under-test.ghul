@@ -123,7 +123,7 @@ namespace Tester is
             fi
 
             if _run_mode != CompilerRunMode.DOTNET then
-                throw Exception("a compiler command can only be set for --use-dotnet-build runs")
+                throw Exception("a compiler command can only be set for a msbuild or direct build")
             fi
 
             let trimmed = command.trim()
@@ -155,14 +155,14 @@ namespace Tester is
             File.write_all_lines(log, lines)
         si
 
-        // Whether a `--use-dotnet-build` run builds a project the runner can
+        // Whether a project build builds a project the runner can
         // read with the compiler alone, rather than with MSBuild.
         build_directly: bool => _build_directly
         _build_directly: bool
 
         set_build_directly(directly: bool) is
             if directly /\ _run_mode != CompilerRunMode.DOTNET then
-                throw Exception("--direct can only be given with --use-dotnet-build")
+                throw Exception("a direct build is a kind of project build")
             fi
 
             _build_directly = directly
@@ -183,7 +183,7 @@ namespace Tester is
         reference_arguments(runtime_path: string) -> Iterable[string] is
             let arguments = LIST[string]()
 
-            // A --use-dotnet-build run finds the pack only once a project is
+            // A project build finds the pack only once a project is
             // built directly, since MSBuild finds its own.
             let reference_path = _sdk_reference_path ?? discover_sdk_reference_path()
 

@@ -15,7 +15,7 @@ RUNNER="dotnet bin/Debug/net10.0/ghul-test.dll"
 
 echo integration-tests/execution-fail...
 
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/execution-fail | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/execution-fail | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
     echo integration-tests/execution-fail unexpectedly succeeded
@@ -38,7 +38,7 @@ fi
 echo integration-tests/execution-fail: PASS
 
 
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/execution-pass | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/execution-pass | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/execution-pass unexpectedly succeeded
@@ -63,8 +63,8 @@ echo integration-tests/execution-pass: PASS
 
 echo integration-tests/runtime-dll-override-valid...
 
-# The --runtime-dll override should be transparent when pointed at the same
-# runtime that CI mode would have discovered itself: hello-world still passes.
+# The configuration names the runtime a test runs against, and hello-world
+# passes on the one the runner was built with.
 RUNTIME_DLL="$(pwd)/bin/Debug/net10.0/ghul-runtime.dll"
 
 if [ ! -f "$RUNTIME_DLL" ]; then
@@ -72,7 +72,7 @@ if [ ! -f "$RUNTIME_DLL" ]; then
     exit 1
 fi
 
-TEST_PROCESSES=1 CI=1 $RUNNER --runtime-dll "$RUNTIME_DLL" integration-tests/execution-pass | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/execution-pass | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/runtime-dll-override-valid unexpectedly failed
@@ -93,7 +93,7 @@ echo integration-tests/runtime-dll-override-missing...
 
 # A missing runtime DLL must fail fast with a clear message, not silently fall
 # back to default discovery.
-TEST_PROCESSES=1 CI=1 $RUNNER --runtime-dll /tmp/ghul-test-no-such-runtime.dll integration-tests/execution-pass | tee actual-output
+TEST_PROCESSES=1 $RUNNER --config missing-runtime integration-tests/execution-pass | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
     echo integration-tests/runtime-dll-override-missing did not exit 1
@@ -112,7 +112,7 @@ echo integration-tests/runtime-dll-override-missing: PASS
 
 echo integration-tests/dotnet-build...
 
-TEST_PROCESSES=1 CI=1 $RUNNER --use-dotnet-build --compiler "dotnet ghul-compiler" integration-tests/dotnet-build | tee actual-output
+TEST_PROCESSES=1 $RUNNER --config msbuild integration-tests/dotnet-build | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/dotnet-build unexpectedly failed
@@ -133,7 +133,7 @@ echo integration-tests/dotnet-build-direct...
 
 # The same project, built with the compiler alone: the run above restored the
 # runtime it references, so it qualifies.
-TEST_PROCESSES=1 CI=1 $RUNNER --use-dotnet-build --direct --compiler "dotnet ghul-compiler" integration-tests/dotnet-build | tee actual-output
+TEST_PROCESSES=1 $RUNNER --config direct integration-tests/dotnet-build | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/dotnet-build-direct unexpectedly failed
@@ -150,30 +150,31 @@ fi
 echo integration-tests/dotnet-build-direct: PASS
 
 
-echo integration-tests/direct-needs-dotnet-build...
+echo integration-tests/removed-option...
 
-TEST_PROCESSES=1 CI=1 $RUNNER --direct integration-tests/execution-pass | tee actual-output
+# The options a configuration replaced are refused, naming what to write instead.
+TEST_PROCESSES=1 $RUNNER --direct integration-tests/execution-pass | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
-    echo integration-tests/direct-needs-dotnet-build did not exit 1
+    echo integration-tests/removed-option did not exit 1
 
     exit 1
 fi
 
-if ! grep -q -- "--direct can only be given with --use-dotnet-build" actual-output ; then
-    echo integration-tests/direct-needs-dotnet-build did not say why
+if ! grep -q -- "--direct was removed in ghul-test 6.0.0" actual-output ; then
+    echo integration-tests/removed-option did not say the option was removed
 
     exit 1
 fi
 
-echo integration-tests/direct-needs-dotnet-build: PASS
+echo integration-tests/removed-option: PASS
 
 
 echo integration-tests/compiler-override-honoured...
 
 # The chosen compiler has to reach the build itself, not just be reported: a
 # command that is not a compiler must fail the build it was handed to.
-TEST_PROCESSES=1 CI=1 $RUNNER --use-dotnet-build --compiler /bin/false integration-tests/dotnet-build | tee actual-output
+TEST_PROCESSES=1 $RUNNER --config msbuild --compiler /bin/false integration-tests/dotnet-build | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
     echo integration-tests/compiler-override-honoured did not exit 1
@@ -194,7 +195,7 @@ echo integration-tests/compiler-override-missing...
 
 # A missing compiler must fail fast with a clear message, not silently fall back
 # to whatever the project resolves for itself.
-TEST_PROCESSES=1 CI=1 $RUNNER --use-dotnet-build --compiler /tmp/ghul-test-no-such-compiler integration-tests/dotnet-build | tee actual-output
+TEST_PROCESSES=1 $RUNNER --config msbuild --compiler /tmp/ghul-test-no-such-compiler integration-tests/dotnet-build | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
     echo integration-tests/compiler-override-missing did not exit 1
@@ -213,9 +214,9 @@ echo integration-tests/compiler-override-missing: PASS
 
 echo integration-tests/compiler-override-wrong-mode...
 
-# --compiler only means anything for a `dotnet build` run, so asking for it
-# elsewhere is an error rather than a silently ignored flag.
-TEST_PROCESSES=1 CI=1 $RUNNER --compiler /bin/false integration-tests/execution-pass | tee actual-output
+# Under a build that runs the compiler directly, --compiler names a published
+# compiler, so a command that is not one fails rather than being ignored.
+TEST_PROCESSES=1 $RUNNER --compiler /bin/false integration-tests/execution-pass | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
     echo integration-tests/compiler-override-wrong-mode did not exit 1
@@ -223,7 +224,7 @@ if [ "${PIPESTATUS[0]}" != "1" ]; then
     exit 1
 fi
 
-if ! grep -q "only be set for --use-dotnet-build" actual-output ; then
+if ! grep -q "Could not find published compiler" actual-output ; then
     echo integration-tests/compiler-override-wrong-mode did not report the mode error
 
     exit 1
@@ -236,7 +237,7 @@ echo integration-tests/undiscovered...
 # A directory holding a test.ghul or an expected snapshot but no ghulflags
 # is never run, so it is named and fails the run; a directory holding other
 # source, such as a library a test builds against, is not a test at all.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/undiscovered | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/undiscovered | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
     echo integration-tests/undiscovered did not exit 1
@@ -269,7 +270,7 @@ echo integration-tests/il-expected...
 # A test carrying il.expected has the emitted assembly disassembled and
 # compared, so this covers the whole path: running ildasm, dropping the lines
 # that describe the run rather than the assembly, and diffing what is left.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/il-expected | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/il-expected | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/il-expected unexpectedly failed
@@ -289,7 +290,7 @@ echo integration-tests/ildasm-override-missing...
 
 # A disassembler named explicitly but absent must fail fast with one clear
 # message, not fall back to discovery and quietly use something else.
-TEST_PROCESSES=1 CI=1 $RUNNER --ildasm /tmp/ghul-test-no-such-ildasm integration-tests/execution-pass | tee actual-output
+TEST_PROCESSES=1 $RUNNER --config missing-ildasm integration-tests/execution-pass | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
     echo integration-tests/ildasm-override-missing did not exit 1
@@ -311,7 +312,7 @@ echo integration-tests/il-item-missing...
 # disassembler says nothing about one and exits zero, writing only the
 # assembly preamble, so a snapshot captured from it would assert nothing about
 # the construct it names and pass for good.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/il-item-missing | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/il-item-missing | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
     echo integration-tests/il-item-missing did not exit 1
@@ -332,7 +333,7 @@ echo integration-tests/il-item-property...
 # An il.item naming a field or property is a documented use, and the enclosing
 # class is written out around it, so the check that the item was found has to
 # accept a member directive rather than only a method.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/il-item-property | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/il-item-property | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/il-item-property unexpectedly failed
@@ -354,7 +355,7 @@ echo integration-tests/il-item-typo...
 # A member that does not exist on a type that does. The enclosing class is
 # written out either way, so this is the case a check for the class alone
 # would wave through.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/il-item-typo | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/il-item-typo | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
     echo integration-tests/il-item-typo did not exit 1
@@ -372,10 +373,11 @@ echo integration-tests/il-item-typo: PASS
 
 echo integration-tests/ildasm-override-relative...
 
-# A relative --ildasm path is checked against this directory and then run from
-# another: every test is launched with its own folder as the working
-# directory. Unresolved, it would name a different file there, or nothing.
-TEST_PROCESSES=1 CI=1 $RUNNER --ildasm ./bin/Debug/net10.0/runtimes/linux-x64/native/ildasm integration-tests/il-expected | tee actual-output
+# A configuration's relative ildasm path is taken from the file and then run
+# from another directory: every test is launched with its own folder as the
+# working directory. Unresolved, it would name a different file there, or
+# nothing.
+TEST_PROCESSES=1 $RUNNER --config relative-ildasm integration-tests/il-expected | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/ildasm-override-relative unexpectedly failed
@@ -393,11 +395,11 @@ echo integration-tests/ildasm-override-relative: PASS
 
 echo integration-tests/ildasm-env-missing...
 
-# GHUL_TEST_ILDASM is documented as equivalent to --ildasm, so a path that
+# GHUL_TEST_ILDASM overrides the configuration's ildasm, so a path that
 # does not exist has to fail the same way rather than being ignored in favour
 # of the shipped copy - which would silently run something other than what was
 # asked for.
-TEST_PROCESSES=1 CI=1 GHUL_TEST_ILDASM=/tmp/ghul-test-no-such-ildasm $RUNNER integration-tests/il-expected | tee actual-output
+TEST_PROCESSES=1 GHUL_TEST_ILDASM=/tmp/ghul-test-no-such-ildasm $RUNNER integration-tests/il-expected | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
     echo integration-tests/ildasm-env-missing did not exit 1
@@ -418,7 +420,7 @@ echo integration-tests/run-in...
 # A test carrying run.in has that file written to the program's standard input.
 # The program reads to end of input, so this covers the close as well as the
 # write: without it the read never returns and the run times out.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/run-in | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/run-in | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/run-in unexpectedly failed
@@ -440,7 +442,7 @@ echo integration-tests/run-args...
 # A test carrying run.args gives the program that command line, one
 # argument a line. The second argument holds a space, so this also covers an
 # argument reaching the program whole rather than split in two.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/run-args | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/run-args | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/run-args unexpectedly failed
@@ -462,7 +464,7 @@ echo integration-tests/run-stderr...
 # A test carrying run.err.expected asserts what the program wrote to its
 # standard error, which is captured either way but compared only when the
 # expectation is there.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/run-stderr | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/run-stderr | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/run-stderr unexpectedly failed
@@ -483,7 +485,7 @@ echo integration-tests/run-stderr-fail...
 
 # ... and reports a difference on that stream as a failure, rather than
 # passing because the standard output matched.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/run-stderr-fail | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/run-stderr-fail | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
     echo integration-tests/run-stderr-fail unexpectedly succeeded
@@ -504,7 +506,7 @@ echo integration-tests/run-exit...
 
 # A test carrying run.exit.expected passes when the program ends with that
 # status, which is how a program whose subject is failing is tested at all.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/run-exit | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/run-exit | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/run-exit unexpectedly failed
@@ -524,7 +526,7 @@ echo integration-tests/run-exit: PASS
 echo integration-tests/run-exit-fail...
 
 # ... and fails when it ends with a different one.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/run-exit-fail | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/run-exit-fail | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
     echo integration-tests/run-exit-fail unexpectedly succeeded
@@ -546,7 +548,7 @@ echo integration-tests/back-pressure...
 # The program fills its error pipe before it has finished reading its input,
 # which deadlocks a runner that writes the whole input before reading any
 # output. Both pipes have to be drained while the program is still running.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/back-pressure | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/back-pressure | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/back-pressure unexpectedly failed
@@ -569,7 +571,7 @@ echo integration-tests/run-session...
 # it: each line is sent when the program is sitting at a prompt, and echoed
 # into the transcript there. The same input as a run.in produces the prompts
 # with the answers missing, which is what this asserts is no longer captured.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/run-session | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/run-session | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/run-session unexpectedly failed
@@ -593,7 +595,7 @@ echo integration-tests/input-conflict...
 # stream. The test also carries a format.expected, because the formatted
 # binary is given the input too and is run first: the refusal has to come
 # before either of them, not from the run alone.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/input-conflict | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/input-conflict | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
     echo integration-tests/input-conflict did not exit 1
@@ -616,7 +618,7 @@ echo integration-tests/png-expected...
 # expectation was recompressed by another tool, so the two files hold the
 # same picture in different bytes: a comparison of the bytes alone would
 # reject it, which is the whole reason the images are decoded.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/png-expected | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/png-expected | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/png-expected unexpectedly failed
@@ -636,7 +638,7 @@ echo integration-tests/png-missing...
 
 # An expectation naming an image the test never wrote is a failure, not a
 # comparison quietly skipped.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/png-missing | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/png-missing | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
     echo integration-tests/png-missing did not exit 1
@@ -660,7 +662,7 @@ echo integration-tests/png-filters...
 # describes a line in terms of the bytes left of it and the line above, so
 # an expectation from any other tool will use them even though the images
 # written here do not.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/png-filters | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/png-filters | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/png-filters unexpectedly failed
@@ -679,7 +681,7 @@ echo integration-tests/png-filters: PASS
 
 echo integration-tests/format-pass...
 
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/format-pass | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/format-pass | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/format-pass unexpectedly failed
@@ -698,7 +700,7 @@ echo integration-tests/format-pass: PASS
 
 echo integration-tests/format-fail...
 
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/format-fail | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/format-fail | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
     echo integration-tests/format-fail unexpectedly succeeded
@@ -726,7 +728,7 @@ chmod -x bin/Debug/net10.0/runtimes/linux-x64/native/ildasm
 
 rm -f integration-tests/il-expected/hello-world/il.out
 
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/il-expected | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/il-expected | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/ildasm-not-executable unexpectedly failed
@@ -748,7 +750,7 @@ echo integration-tests/run-check...
 # snapshot. The test also carries a run.expected that disagrees, which asserts
 # the snapshot is ignored where a recognizer is present rather than both being
 # applied.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/run-check | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/run-check | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/run-check unexpectedly failed
@@ -769,7 +771,7 @@ echo integration-tests/run-check-fail...
 
 # What the recognizer writes is what the failure report carries, because an
 # exit status alone does not say which part of the output was wrong.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/run-check-fail | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/run-check-fail | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
     echo integration-tests/run-check-fail unexpectedly succeeded
@@ -792,7 +794,7 @@ echo integration-tests/library-run-files...
 # mistake. Unreported it reads as a passing assertion, because the expectation
 # is simply never compared - which is how a build that emitted nothing could
 # pass against an empty run.expected.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/library-run-files | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/library-run-files | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
     echo integration-tests/library-run-files did not exit 1
@@ -815,7 +817,7 @@ echo integration-tests/project-tests...
 # local tool, and its program run from out/<target>/: the same expectation
 # files decide a project test as any other, so one program that runs and
 # one that does not build cover both halves.
-TEST_PROCESSES=1 CI=1 $RUNNER --use-ghul-cli --ghul "dotnet ghul" integration-tests/project-tests | tee actual-output
+TEST_PROCESSES=1 $RUNNER --config ghul-cli integration-tests/project-tests | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/project-tests unexpectedly failed
@@ -836,7 +838,7 @@ echo integration-tests/project-tests-target...
 
 # --target picks which of a manifest's targets a project test is built for,
 # and a project that does not list it is not a test of that target.
-TEST_PROCESSES=1 CI=1 $RUNNER --use-ghul-cli --ghul "dotnet ghul" --target wasm integration-tests/project-tests | tee actual-output
+TEST_PROCESSES=1 $RUNNER --config ghul-cli-wasm integration-tests/project-tests | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/project-tests-target unexpectedly failed
@@ -859,7 +861,7 @@ echo integration-tests/targets-file...
 # directory of its own under `.targets/<target>/`, with that target's
 # expectation standing in for the plain one: `run.dotnet.expected` is what the
 # variant is held to, and the `run.expected` beside it says something else.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/targets-file | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/targets-file | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/targets-file failed
@@ -885,7 +887,7 @@ echo integration-tests/targets-file-unknown...
 
 # A `targets` file naming something ghul-test cannot run is reported rather
 # than run under whatever target it would have defaulted to.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/targets-file-unknown | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/targets-file-unknown | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
     echo integration-tests/targets-file-unknown did not exit 1
@@ -905,7 +907,7 @@ echo integration-tests/targets-file-flags...
 
 # A test cannot name its target twice: once in `ghulflags` and again in
 # `targets`.
-TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/targets-file-flags | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/targets-file-flags | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
     echo integration-tests/targets-file-flags did not exit 1
@@ -923,9 +925,9 @@ echo integration-tests/targets-file-flags: PASS
 
 echo integration-tests/target-flags...
 
-# --target-flags adds flags to every run a targets file produces for that
-# target: the test prints a second line only when built with --define extra.
-TEST_PROCESSES=1 CI=1 $RUNNER --target-flags dotnet "--define extra" integration-tests/target-flags | tee actual-output
+# A configuration's target flags are added to every run a targets file
+# produces for that target: the test prints a second line only when built with --define extra.
+TEST_PROCESSES=1 $RUNNER --config extra-define integration-tests/target-flags | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/target-flags failed
@@ -977,7 +979,7 @@ expect_configuration_problem() {
         exit 1
     fi
 
-    if ! grep -q "$problem" actual-output ; then
+    if ! grep -q -- "$problem" actual-output ; then
         echo integration-tests/configurations: $name did not report: $problem
         exit 1
     fi
@@ -1006,7 +1008,7 @@ expect_configuration_problem "unknown run target" "run_targets names cobol" --co
 
 expect_configuration_problem "unknown" "has no configuration named nightly" --config nightly tests
 expect_configuration_problem "incomplete" "names its runtime" --config no-runtime tests
-expect_configuration_problem "with --ci" "cannot be given with an option the configuration sets" --config tool --ci tests
+expect_configuration_problem "with --ci" "--ci was removed in ghul-test 6.0.0" --config tool --ci tests
 
 echo integration-tests/configurations: PASS
 

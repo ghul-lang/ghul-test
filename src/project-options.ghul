@@ -6,7 +6,7 @@ namespace Tester is
     use System.Xml.Linq.XName
 
     // The compiler options a test's project files carry. A test built with
-    // `--use-dotnet-build` is compiled from its `.ghulproj`, so it states
+    // a project build is compiled from its `.ghulproj`, so it states
     // its options there, in `GhulOptions`, rather than in `ghulflags`.
     class PROJECT_OPTIONS is
         // Every `GhulOptions` value in the project files in `path`, joined
