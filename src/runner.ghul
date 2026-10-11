@@ -153,7 +153,7 @@ namespace Tester is
             //
             // The optional code between severity and colon has to be a
             // ghūl slug - lowercase kebab-case - so that a
-            // --use-dotnet-build test's snapshot keeps to the ghūl
+            // project build test's snapshot keeps to the ghūl
             // diagnostics it asserts rather than absorbing the build
             // engine's own lines, whose codes are uppercase-prefixed
             // (MSB3073, CS0012).
@@ -245,7 +245,7 @@ namespace Tester is
             fi
 
             if _compiler_under_test.is_dotnet_build \/ _compiler_under_test.is_ghul_cli then
-                add_fail("format.expected is not supported under --use-dotnet-build or --use-ghul-cli")
+                add_fail("format.expected is not supported in a msbuild, direct or ghul-cli build")
                 return
             fi
 

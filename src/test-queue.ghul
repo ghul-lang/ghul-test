@@ -237,7 +237,7 @@ namespace Tester is
             queue_test(test)
         si
 
-        // The flags --target-flags gives for runs under `target`, with a
+        // The flags the configuration gives runs under `target`, with a
         // leading space so they append to a command line, or nothing.
         extra_flags(target: string) -> string =>
             if _target_flags.contains_key(target) then " {_target_flags[target]}" else "" fi
@@ -299,7 +299,7 @@ namespace Tester is
 
             Std.write_line(
                 "{wanted} test(s) expect IL but no disassembler was found: "
-                "set GHUL_TEST_ILDASM, or pass --ildasm <path>")
+                "set GHUL_TEST_ILDASM, or name ildasm in the configuration")
         si
 
         queue_test(test: TEST) is
@@ -312,7 +312,7 @@ namespace Tester is
         // the shard ordinal, so a shard holds every variant or none.
         queue_variants(path: string, flags: string, tags: Iterable[string]) is
             if _compiler_under_test.is_dotnet_build \/ _compiler_under_test.is_ghul_cli then
-                _undiscovered.add("{path}: a {TARGET_VARIANTS.TARGETS} file is not supported under --use-dotnet-build or --use-ghul-cli, where the build names the target")
+                _undiscovered.add("{path}: a {TARGET_VARIANTS.TARGETS} file is not supported in a msbuild, direct or ghul-cli build, where the build names the target")
                 return
             fi
 

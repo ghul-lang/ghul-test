@@ -18,52 +18,16 @@ namespace Tester is
             Std.output_encoding = UTF8Encoding()
 
             if arguments.count == 0 then
-                Std.write_line("usage: ghul-test [--config <name>] [--use-dotnet-build [--direct]] [--ci|--no-ci] [--tag <name>]... [--not-tag <name>]... [--target-flags <target> <flags>]... [--shard <index>/<count>] <test-folder>...")
+                Std.write_line("usage: ghul-test [--config <name>] [--compiler <command>] [--tag <name>]... [--not-tag <name>]... [--shard <index>/<count>] <test-folder>...")
                 return 1
             fi
 
-            let host = get_cli_environment_variable("HOST")
-            let target = get_cli_environment_variable("TARGET")
-
-            // report_host_and_target(host, target);
-
-            let ci_string =
-                System.Environment.get_environment_variable("CI") ?? ""
-
-            // `--ci` and `--no-ci` say outright which of the two the
-            // environment variable would have chosen, for the case where the
-            // environment says the wrong thing: a job that publishes a
-            // compiler to run against is in CI, but wants the published one
-            // rather than the tool. With neither, the environment decides.
-            let ci_forced mut = -1
-
-            // The mode `--use-dotnet-build` or `--use-ghul-cli` asks for, which
-            // takes the compiler from the build rather than from either source
-            // `--ci` and `--no-ci` choose between.
-            let build_mode: CompilerRunMode? mut = null
-
-            // Whether `--use-dotnet-build` builds a project the runner can
-            // read with the compiler alone, rather than with MSBuild.
-            let build_directly mut = false
-
-            let run_mode mut =
-                if ci_string =~ "1" \/ ci_string.to_lower() =~ "true" then
-                    CompilerRunMode.CI
-                else
-                    CompilerRunMode.LOCAL
-                fi
-
-            let runtime_dll_override mut =
-                System.Environment.get_environment_variable("GHUL_RUNTIME_DLL")
-
-            let compiler_override mut =
-                System.Environment.get_environment_variable("GHUL_TEST_COMPILER")
+            // The program a .NET test's binary runs under.
+            let host = "dotnet"
+            let target = "dotnet"
 
             let ildasm_override: string? mut =
                 System.Environment.get_environment_variable("GHUL_TEST_ILDASM")
-
-            let ghul_command: string? mut = null
-            let project_target: string? mut = null
 
             let test_paths = LIST[string]()
             let requested_tags = LIST[string]()
@@ -72,13 +36,10 @@ namespace Tester is
 
             let shard_spec: string? mut
 
-            // The configuration `--config` names, and whether any option was given
-            // that a configuration sets instead, which the two cannot both say.
             let configuration_name: string? mut = null
-            let shaped_by_options mut = false
 
-            // The compiler `--compiler` names, which overrides the one a
-            // configuration names, where the environment's does not.
+            // The compiler `--compiler` names, which overrides the one the
+            // configuration names.
             let compiler_option: string? mut = null
 
             let i mut = 0
@@ -95,65 +56,6 @@ namespace Tester is
                     fi
 
                     configuration_name = arguments[i]
-                elif arg =~ "--use-dotnet-build" then
-                    shaped_by_options = true
-                    build_mode = CompilerRunMode.DOTNET
-                elif arg =~ "--direct" then
-                    shaped_by_options = true
-                    build_directly = true
-                elif arg =~ "--use-ghul-cli" then
-                    shaped_by_options = true
-                    build_mode = CompilerRunMode.GHUL_CLI
-                elif arg =~ "--ci" then
-                    shaped_by_options = true
-
-                    if ci_forced == 0 then
-                        Std.write_line("--ci and --no-ci cannot both be given")
-                        return 1
-                    fi
-
-                    ci_forced = 1
-                    run_mode = CompilerRunMode.CI
-                elif arg =~ "--no-ci" then
-                    shaped_by_options = true
-
-                    if ci_forced == 1 then
-                        Std.write_line("--ci and --no-ci cannot both be given")
-                        return 1
-                    fi
-
-                    ci_forced = 0
-                    run_mode = CompilerRunMode.LOCAL
-                elif arg =~ "--ghul" then
-                    shaped_by_options = true
-                    i = i + 1
-
-                    if i >= arguments.count then
-                        Std.write_line("--ghul requires a command argument")
-                        return 1
-                    fi
-
-                    ghul_command = arguments[i]
-                elif arg =~ "--target" then
-                    shaped_by_options = true
-                    i = i + 1
-
-                    if i >= arguments.count then
-                        Std.write_line("--target requires a target name argument")
-                        return 1
-                    fi
-
-                    project_target = arguments[i]
-                elif arg =~ "--runtime-dll" then
-                    shaped_by_options = true
-                    i = i + 1
-
-                    if i >= arguments.count then
-                        Std.write_line("--runtime-dll requires a path argument")
-                        return 1
-                    fi
-
-                    runtime_dll_override = arguments[i]
                 elif arg =~ "--compiler" then
                     i = i + 1
 
@@ -163,17 +65,6 @@ namespace Tester is
                     fi
 
                     compiler_option = arguments[i]
-                    compiler_override = arguments[i]
-                elif arg =~ "--ildasm" then
-                    shaped_by_options = true
-                    i = i + 1
-
-                    if i >= arguments.count then
-                        Std.write_line("--ildasm requires a path argument")
-                        return 1
-                    fi
-
-                    ildasm_override = arguments[i]
                 elif arg =~ "--shard" then
                     i = i + 1
 
@@ -201,23 +92,9 @@ namespace Tester is
                     fi
 
                     excluded_tags.add(arguments[i])
-                elif arg =~ "--target-flags" then
-                    shaped_by_options = true
-                    i = i + 2
-
-                    if i >= arguments.count then
-                        Std.write_line("--target-flags requires a target name and a flags argument")
-                        return 1
-                    fi
-
-                    let named = arguments[i - 1]
-
-                    if !TEST_TARGETS.of(named)? then
-                        Std.write_line("--target-flags names {named}, which is not a target ghul-test can run")
-                        return 1
-                    fi
-
-                    target_flags[named] = if target_flags.contains_key(named) then "{target_flags[named]} {arguments[i]}" else arguments[i] fi
+                elif let replacement = REMOVED_OPTIONS.replacement(arg) then
+                    Std.write_line("{arg} was removed in ghul-test 6.0.0: {replacement}")
+                    return 1
                 else
                     test_paths.add(arg)
                 fi
@@ -225,100 +102,77 @@ namespace Tester is
                 i = i + 1
             od
 
-            let publish_directory: string? mut = null
-            let published_command: string? mut = null
-            let run_targets: Collections.List[TestTarget]? mut = null
-
             let configuration_file = RUN_CONFIGURATION.find_file(Directory.get_current_directory())
 
+            if !configuration_file? then
+                Std.write_line("no {RUN_CONFIGURATION.FILE} in the working directory or above it, to say how tests are run")
+                return 1
+            fi
+
+            let configuration: RUN_CONFIGURATION mut
+
             try
-                if !configuration_name? /\ !shaped_by_options then
-                    if let file = configuration_file then
-                        configuration_name = RUN_CONFIGURATION.default_name(file)
-                    fi
+                let name = configuration_name ?? RUN_CONFIGURATION.default_name(configuration_file)
+
+                if !name? then
+                    Std.write_line("{configuration_file} names no default configuration, so a run names one with --config")
+                    return 1
                 fi
+
+                configuration = RUN_CONFIGURATION.read(configuration_file, name)
+
+                Std.error.write_line("configuration: {name} from {configuration_file}")
             catch ex: Exception
                 Std.write_line(ex.message)
                 return 1
             yrt
 
-            if let name = configuration_name then
-                if shaped_by_options then
-                    Std.write_line("--config cannot be given with an option the configuration sets; of those only --compiler can override it")
-                    return 1
-                fi
+            let build_directly = configuration.build =~ "direct"
+            let runtime_dll_override = configuration.runtime_path
+            let ghul_command = configuration.ghul_command
+            let project_target = configuration.ghul_target
+            let run_targets = configuration.run_targets
 
-                let file = configuration_file
+            ildasm_override = ildasm_override ?? configuration.ildasm
 
-                if !file? then
-                    Std.write_line("--config {name}: no {RUN_CONFIGURATION.FILE} in the working directory or above it")
-                    return 1
-                fi
+            for (flags_target, flags) in configuration.target_flags do
+                target_flags[flags_target] = flags
+            od
 
-                let configuration: RUN_CONFIGURATION mut
-
-                try
-                    configuration = RUN_CONFIGURATION.read(file, name)
-                catch ex: Exception
-                    Std.write_line(ex.message)
-                    return 1
-                yrt
-
-                Std.write_line("configuration: {name} from {file}")
-
-                build_mode =
-                    if configuration.build =~ "msbuild" \/ configuration.build =~ "direct" then
-                        CompilerRunMode.DOTNET
-                    elif configuration.build =~ "ghul-cli" then
-                        CompilerRunMode.GHUL_CLI
-                    else
-                        null
-                    fi
-
-                build_directly = configuration.build =~ "direct"
-                run_mode = if configuration.uses_tool then CompilerRunMode.CI else CompilerRunMode.LOCAL fi
-                runtime_dll_override = configuration.runtime_path
-                ildasm_override = ildasm_override ?? configuration.ildasm
-                ghul_command = configuration.ghul_command
-                project_target = configuration.ghul_target
-
-                run_targets = configuration.run_targets
-
-                for (target, flags) in configuration.target_flags do
-                    target_flags[target] = flags
-                od
-
-                if configuration.build =~ "compiler" then
-                    publish_directory = configuration.publish_directory
-                    published_command = configuration.compiler_command
-                    compiler_override = null
-
-                    if let named = compiler_option then
-                        publish_directory = COMPILER_OPTION.publish_directory_of(named)
-                        published_command = null
-                        run_mode = CompilerRunMode.LOCAL
-                    fi
+            let run_mode mut =
+                if configuration.build =~ "msbuild" \/ configuration.build =~ "direct" then
+                    CompilerRunMode.DOTNET
+                elif configuration.build =~ "ghul-cli" then
+                    CompilerRunMode.GHUL_CLI
+                elif configuration.uses_tool then
+                    CompilerRunMode.CI
                 else
-                    compiler_override = compiler_option ?? configuration.compiler_command
+                    CompilerRunMode.LOCAL
                 fi
 
-                if let mode = build_mode then
-                    run_mode = mode
-                fi
-            elif let mode = build_mode then
-                if ci_forced >= 0 then
-                    Std.write_line("--ci and --no-ci cannot be given with --use-dotnet-build or --use-ghul-cli, which take the compiler from the build")
-                    return 1
-                fi
+            let publish_directory: string? mut = null
+            let published_command: string? mut = null
+            let compiler_override: string? mut = null
 
-                run_mode = mode
+            if configuration.build =~ "compiler" then
+                publish_directory = configuration.publish_directory
+                published_command = configuration.compiler_command
+
+                if let named = compiler_option then
+                    publish_directory = COMPILER_OPTION.publish_directory_of(named)
+                    published_command = null
+                    run_mode = CompilerRunMode.LOCAL
+                fi
+            else
+                compiler_override = compiler_option ?? configuration.compiler_command
             fi
 
-            let compiler_under_test = COMPILER_UNDER_TEST(run_mode, publish_directory, published_command)
-
+            let compiler_under_test: COMPILER_UNDER_TEST mut
             let disassembler: DISASSEMBLER mut
 
             try
+                compiler_under_test = COMPILER_UNDER_TEST(run_mode, publish_directory, published_command)
+
                 compiler_under_test.set_runtime_path(runtime_dll_override)
                 compiler_under_test.set_compiler_command(compiler_override)
                 compiler_under_test.set_ghul_command(ghul_command)
@@ -451,8 +305,31 @@ namespace Tester is
 
             throw Exception("unknown CLI environment: {name}")
         si
+    si
+si
 
-        get_cli_environment_variable(name: string) -> string static =>
-            System.Environment.get_environment_variable(name) ?? "dotnet"
+namespace Tester is
+    /// The options ghul-test 6.0.0 removed in favour of a configuration in
+    /// `ghul-test.json`, and what to write instead.
+    class REMOVED_OPTIONS is
+        /// What replaces `option`, or null where it was never removed.
+        ///
+        /// - option: a command-line argument
+        replacement(option: string) -> string? static =>
+            if option =~ "--ci" \/ option =~ "--no-ci" then
+                "a configuration names its compiler: \"tool\", or an object naming publish or path"
+            elif option =~ "--use-dotnet-build" \/ option =~ "--direct" \/ option =~ "--use-ghul-cli" then
+                "a configuration names its build: msbuild, direct or ghul-cli"
+            elif option =~ "--ghul" \/ option =~ "--target" then
+                "a ghul-cli configuration names its ghul and ghul_target"
+            elif option =~ "--runtime-dll" then
+                "a configuration names its runtime"
+            elif option =~ "--ildasm" then
+                "a configuration names its ildasm, or set GHUL_TEST_ILDASM"
+            elif option =~ "--target-flags" then
+                "a configuration names each target's flags and libraries under targets"
+            else
+                null
+            fi
     si
 si

@@ -1,0 +1,44 @@
+{
+    // The runner's own runs of its integration tests, from this directory:
+    // the compiler the tool manifest pins, and the runtime the runner was
+    // built with.
+    "default": "tool",
+    "configurations": {
+        "tool": {
+            "compiler": "tool",
+            "runtime": { "path": "bin/Debug/net10.0/ghul-runtime.dll" }
+        },
+        "missing-runtime": {
+            "extends": "tool",
+            "runtime": { "path": "integration-tests/no-such-runtime.dll" }
+        },
+        "missing-ildasm": {
+            "extends": "tool",
+            "ildasm": "integration-tests/no-such-ildasm"
+        },
+        "relative-ildasm": {
+            "extends": "tool",
+            "ildasm": "bin/Debug/net10.0/runtimes/linux-x64/native/ildasm"
+        },
+        "extra-define": {
+            "extends": "tool",
+            "targets": { "dotnet": { "flags": "--define extra" } }
+        },
+        "msbuild": {
+            "build": "msbuild",
+            "compiler": { "command": "dotnet ghul-compiler" }
+        },
+        "direct": {
+            "build": "direct",
+            "compiler": { "command": "dotnet ghul-compiler" }
+        },
+        "ghul-cli": {
+            "build": "ghul-cli",
+            "ghul": "dotnet ghul"
+        },
+        "ghul-cli-wasm": {
+            "extends": "ghul-cli",
+            "ghul_target": "wasm"
+        }
+    }
+}
