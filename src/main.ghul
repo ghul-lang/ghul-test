@@ -18,7 +18,7 @@ namespace Tester is
             Std.output_encoding = UTF8Encoding()
 
             if arguments.count == 0 then
-                Std.write_line("usage: ghul-test [--use-dotnet-build [--direct]] [--ci|--no-ci] [--tag <name>]... [--not-tag <name>]... [--shard <index>/<count>] <test-folder>...")
+                Std.write_line("usage: ghul-test [--use-dotnet-build [--direct]] [--ci|--no-ci] [--tag <name>]... [--not-tag <name>]... [--target-flags <target> <flags>]... [--shard <index>/<count>] <test-folder>...")
                 return 1
             fi
 
@@ -68,6 +68,7 @@ namespace Tester is
             let test_paths = LIST[string]()
             let requested_tags = LIST[string]()
             let excluded_tags = LIST[string]()
+            let target_flags = Collections.MAP[string, string]()
 
             let shard_spec: string? mut
 
@@ -170,6 +171,22 @@ namespace Tester is
                     fi
 
                     excluded_tags.add(arguments[i])
+                elif arg =~ "--target-flags" then
+                    i = i + 2
+
+                    if i >= arguments.count then
+                        Std.write_line("--target-flags requires a target name and a flags argument")
+                        return 1
+                    fi
+
+                    let named = arguments[i - 1]
+
+                    if !TEST_TARGETS.of(named)? then
+                        Std.write_line("--target-flags names {named}, which is not a target ghul-test can run")
+                        return 1
+                    fi
+
+                    target_flags[named] = if target_flags.contains_key(named) then "{target_flags[named]} {arguments[i]}" else arguments[i] fi
                 else
                     test_paths.add(arg)
                 fi
@@ -246,7 +263,8 @@ namespace Tester is
                     disassembler,
                     PROGRESS_REPORTER(requested.paths),
                     tag_filter,
-                    shard)
+                    shard,
+                    target_flags)
 
             for path in requested.paths do
                 if !Directory.exists(path) then
