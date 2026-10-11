@@ -1,0 +1,21 @@
+{
+    // The runner's own runs of its tests: the compiler the tool manifest
+    // pins, and the runtime the runner was built with.
+    "default": "tool",
+    "configurations": {
+        "tool": {
+            "compiler": "tool",
+            "runtime": { "path": "../../bin/Debug/net10.0/ghul-runtime.dll" }
+        },
+        "extended": {
+            "extends": "tool"
+        },
+        "with-target-flags": {
+            "extends": "tool",
+            "targets": { "dotnet": { "flags": "--define extra" } }
+        },
+        "no-runtime": {
+            "compiler": "tool"
+        }
+    }
+}

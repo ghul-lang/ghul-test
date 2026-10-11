@@ -18,7 +18,7 @@ namespace Tester is
         GHUL_CLI
     si
 
-    class COMPILER_UNDER_TEST(run_mode: CompilerRunMode private) is
+    class COMPILER_UNDER_TEST(run_mode: CompilerRunMode private, publish_directory: string? private) is
         _publish: string
         _executable: string
         _runtime_path: string
@@ -42,7 +42,15 @@ namespace Tester is
                 _sdk_reference_path = discover_sdk_reference_path()
                 _arguments = ["ghul-compiler", "--v3", "--test-run"]
             elif _run_mode == CompilerRunMode.LOCAL then
-                _publish = find_publish_directory()
+                if let named = _publish_directory /\ named.length > 0 then
+                    if !Directory.exists(named) then
+                        throw Exception("publish directory not found: {named}")
+                    fi
+
+                    _publish = named
+                else
+                    _publish = find_publish_directory()
+                fi
 
                 _executable = find_published_compiler()
                 _runtime_path = get_published_compiler_path("ghul-runtime.dll")

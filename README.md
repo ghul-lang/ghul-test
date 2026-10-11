@@ -69,12 +69,60 @@ name an existing file; on any other platform
 one of those is required, and a test wanting IL reports that none was found
 rather than passing quietly.
 
+## Configurations
+
+A repository states how its suites are run in a `ghul-test.json`, and a run names one of its configurations:
+
+```text
+ghul-test --config ci integration-tests
+```
+
+The file is found in the working directory or the nearest directory above it. A run that names no configuration, and gives none of the options a configuration sets, runs the file's `default`, if it has one. Comments and trailing commas are allowed.
+
+```json
+{
+    "default": "local",
+    "configurations": {
+        "local": {
+            "compiler": { "publish": "publish" },
+            "runtime": "beside-compiler",
+            "targets": {
+                "wasm": {
+                    "libraries": [
+                        { "name": "ghul-core", "root": ["libraries/ghul-core", "../ghul-core"], "sources": "src/**/*.ghul" },
+                        { "name": "ghul-runtime", "root": ["libraries/ghul-runtime", "../ghul-runtime"], "sources": "@wasm-sources.rsp" }
+                    ]
+                }
+            }
+        },
+        "ci": {
+            "extends": "local",
+            "compiler": "tool",
+            "runtime": { "path": "bootstrap-tool/ghul-runtime.dll" }
+        }
+    }
+}
+```
+
+Paths are relative to the file. A configuration holds:
+
+- `extends` – another configuration of the file, applied first; what this one sets replaces what that one set, and `targets` is replaced target by target.
+- `build` – how each test is built: `compiler` (the runner calls the compiler; the default), `msbuild` (what `--use-dotnet-build` does), `direct` (what `--use-dotnet-build --direct` does), or `ghul-cli` (what `--use-ghul-cli` does).
+- `compiler` – for a `compiler` build, `"tool"` for the `ghul-compiler` the tool manifest pins, or `{ "publish": "<dir>" }` or `{ "path": "<dir>/ghul.dll" }` for a published compiler. For a `msbuild` or `direct` build, `"project"` to leave each project its own, or `{ "path": ... }` or `{ "command": "<words>" }` for the `GhulCompiler` it is built with.
+- `runtime` – the `ghul-runtime.dll` a compiled test runs against: `"beside-compiler"`, `{ "path": "<file>" }`, or `{ "package": "ghul.runtime", "version": "<version>" }` from the NuGet package cache, where `"pinned_in": "<file>"` in place of `version` reads the version an MSBuild file such as `Directory.Packages.props` pins. A `compiler` build using the tool has to name its runtime.
+- `targets` – for each target a `targets` file can name, the compiler `flags` and the `libraries` a run under it adds. A library is a `name`, a `root` (or a list of candidate roots, the first that exists being used), and `sources`: `<dir>/**/<files>` under the root, or `@<listing>`, a file in the root listing source paths relative to it. The library's version is read from `VERSION` in its root, and each becomes a `--library-source`.
+- `ildasm` – the disassembler.
+- `ghul` and `ghul_target` – for a `ghul-cli` build, the command that runs ghul-cli and the target each project is built for.
+
+With `--config`, only `--compiler` may also be given from among the options a configuration sets, and it overrides the configuration's compiler. The `CI`, `GHUL_RUNTIME_DLL` and `GHUL_TEST_COMPILER` variables have no effect on a configured run; `GHUL_TEST_ILDASM`, where set, overrides `ildasm`.
+
 ## Command Line Usage
 
 ```text
-ghul-test [--use-dotnet-build [--direct] | --use-ghul-cli [--ghul <command>] [--target <name>]] [--ci | --no-ci] [--compiler <command>] [--runtime-dll <path>] [--ildasm <path>] [--tag <name>]... [--not-tag <name>]... [--shard <index>/<count>] <test-folder> [...]
+ghul-test [--config <name>] [--use-dotnet-build [--direct] | --use-ghul-cli [--ghul <command>] [--target <name>]] [--ci | --no-ci] [--compiler <command>] [--runtime-dll <path>] [--ildasm <path>] [--tag <name>]... [--not-tag <name>]... [--shard <index>/<count>] <test-folder> [...]
 ```
 
+- `--config <name>` – run the named configuration from `ghul-test.json`; see [Configurations](#configurations).
 - `--use-dotnet-build` – expects each test folder to be an MSBuild project. For ghūl projects the file should end with `.ghulproj`. The runner builds the project with `dotnet build` instead of invoking the compiler directly.
 - `--direct` – with `--use-dotnet-build`, builds a project with the compiler alone, as MSBuild would have called it, where everything in the project and in the `Directory.Build.props` above it is something the runner can read: an `Exe` on `Microsoft.NET.Sdk` for the runner's target framework, sources `*.ghul` or `**/*.ghul` in the test directory itself, `GhulOptions`, the `Ghul*` properties that become compiler flags, and a `PackageReference` to `ghul.runtime` alone, at a fixed version that is already restored. The program is compiled against and run with that runtime, named after the assembly as MSBuild names it, and its diagnostics are written as MSBuild writes them, so the same snapshots hold either way. Any other project, and one whose `ghulflags` is not empty, is built with `dotnet build` as usual, and the run says how many of each, and why. It skips MSBuild's evaluation, restore and copying for every project it can, which is most of the time a small project takes to build.
 - `--use-ghul-cli` – expects each test folder to be a ghul-cli project: a directory holding a `ghul-project.json` is a test, and needs no `ghulflags`. The runner builds it with `ghul build --target <target>`, with the test folder as the working directory, and runs the program ghul-cli writes to `out/<target>/`: under `node` for the wasm target, directly for llvm, and under `dotnet` for dotnet. The compiler and libraries are whatever the manifest says, as a user's build would take them. The expectation files are the ones described above; `format.expected` and `il.expected` are not supported. A library project (`"kind": "library"`) is built and not run.
