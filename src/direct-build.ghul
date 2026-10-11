@@ -41,6 +41,19 @@ namespace Tester is
         /// MSBuild names it.
         output_name: string public
 
+        /// The target the project is built for where it is not dotnet, which
+        /// MSBuild cannot build, or null for dotnet.
+        target: string? public
+
+        /// The packages the project references other than `ghul.runtime`, in
+        /// lower case: under another target, each is given as the library a
+        /// configuration says stands for it.
+        packages: LIST[string] public
+
+        /// What a run under `target` adds after the project's own options:
+        /// `--target`, then the configuration's flags and libraries for it.
+        target_options: LIST[string] public
+
         /// - compiler: the command the project names to run the compiler, or null
         /// - options: the compiler options, in the order MSBuild passes them
         /// - runtime_version: the version of `ghul.runtime` the project references
@@ -51,6 +64,8 @@ namespace Tester is
             runtime_path = ""
             project_path = ""
             output_name = "binary.dll"
+            packages = LIST[string]()
+            target_options = LIST[string]()
         si
 
         /// The direct build for the project in `path`, or null, with the
@@ -59,7 +74,27 @@ namespace Tester is
         /// - path: the test directory, holding one `.ghulproj`
         /// - target_framework: the framework the compiler targets, such as `net10.0`
         /// - problem: set to why the project needs MSBuild, or null
-        read(path: string, target_framework: string, problem: string? ref) -> DIRECT_BUILD? static is
+        read(path: string, target_framework: string, problem: string? ref) -> DIRECT_BUILD? static =>
+            read(path, target_framework, null, null, problem)
+
+        /// The direct build for the project in `path` under `target`, or
+        /// null, with the reason in `problem`, where it cannot be built
+        /// directly. Under a target other than dotnet nothing is restored or
+        /// referenced: the configuration gives the libraries, and a package
+        /// the project references has to be one of `known_packages`.
+        ///
+        /// - path: the test directory, holding one `.ghulproj`
+        /// - target_framework: the framework the compiler targets, such as `net10.0`
+        /// - target: the target to build for, or null for dotnet
+        /// - known_packages: the packages, in lower case, a library stands for under `target`
+        /// - problem: set to why the project cannot be built directly, or null
+        read(
+            path: string,
+            target_framework: string,
+            target: string?,
+            known_packages: Collections.Set[string]?,
+            problem: string? ref
+        ) -> DIRECT_BUILD? static is
             problem! = null
 
             let projects = Directory.get_files(path, "*.ghulproj")
@@ -77,7 +112,7 @@ namespace Tester is
             let props = _read_upwards(path, "Directory.Build.props")
             let packages = _read_upwards(path, "Directory.Packages.props")
 
-            let result = from_text(File.read_all_text(projects[0]), props, packages, target_framework, problem)
+            let result = from_text(File.read_all_text(projects[0]), props, packages, target_framework, target, known_packages, problem)
 
             if !result? then
                 return null
@@ -85,7 +120,7 @@ namespace Tester is
 
             let runtime = _runtime_path(result.runtime_version, target_framework)
 
-            if !File.exists(runtime) then
+            if !target? /\ !File.exists(runtime) then
                 problem! = "ghul.runtime {result.runtime_version} is not restored"
                 return null
             fi
@@ -94,6 +129,7 @@ namespace Tester is
             // a recursive glob that reaches further is MSBuild's to expand.
             let nested =
                 Directory.get_directories(path)
+                    |> filter(directory => !Path.get_file_name(directory)!.starts_with("."))
                     |> any(directory => Directory.get_files(directory, "*.ghul", IO.SearchOption.ALL_DIRECTORIES).count > 0)
 
             if nested then
@@ -103,7 +139,12 @@ namespace Tester is
 
             result.runtime_path = runtime
             result.project_path = Path.get_full_path(projects[0])
-            result.output_name = "{result.assembly_name ?? Path.get_file_name_without_extension(projects[0])}.dll"
+            result.output_name =
+                if target? then
+                    "binary.exe"
+                else
+                    "{result.assembly_name ?? Path.get_file_name_without_extension(projects[0])}.dll"
+                fi
 
             return result
         si
@@ -124,10 +165,35 @@ namespace Tester is
             packages: string?,
             target_framework: string,
             problem: string? ref
+        ) -> DIRECT_BUILD? static =>
+            from_text(project, props, packages, target_framework, null, null, problem)
+
+        /// The direct build a project file describes under `target`, as
+        /// above: under a target other than dotnet, no runtime version or
+        /// framework is needed, and a reference to one of `known_packages`
+        /// is accepted.
+        ///
+        /// - project: the text of the `.ghulproj`
+        /// - props: the text of the nearest `Directory.Build.props`, or null
+        /// - packages: the text of the nearest `Directory.Packages.props`, or null
+        /// - target_framework: the framework the compiler targets, such as `net10.0`
+        /// - target: the target to build for, or null for dotnet
+        /// - known_packages: the packages, in lower case, a library stands for under `target`
+        /// - problem: set to why the project cannot be built directly, or null
+        from_text(
+            project: string,
+            props: string?,
+            packages: string?,
+            target_framework: string,
+            target: string?,
+            known_packages: Collections.Set[string]?,
+            problem: string? ref
         ) -> DIRECT_BUILD? static is
             problem! = null
 
             let settings = _SETTINGS()
+
+            settings.known_packages = if target? then known_packages else null fi
 
             if let text = props then
                 if !_read_file(text, true, settings, problem) then
@@ -149,31 +215,43 @@ namespace Tester is
                 return null
             fi
 
-            if !((settings.target_framework ?? "") =~ target_framework) then
-                problem! = "TargetFramework is not {target_framework}"
-                return null
-            fi
+            let version mut = ""
 
-            let version = settings.runtime_version ?? _central_version(packages)
+            if !target? then
+                if !((settings.target_framework ?? "") =~ target_framework) then
+                    problem! = "TargetFramework is not {target_framework}"
+                    return null
+                fi
 
-            if !version? then
-                problem! = "no version for ghul.runtime"
-                return null
-            fi
+                let referenced = settings.runtime_version ?? _central_version(packages)
 
-            if !settings.references_runtime then
-                problem! = "no PackageReference to ghul.runtime"
-                return null
-            fi
+                if !referenced? then
+                    problem! = "no version for ghul.runtime"
+                    return null
+                fi
 
-            if version.contains('*') \/ version.contains('[') \/ version.contains('(') then
-                problem! = "ghul.runtime version {version} is a range"
-                return null
+                if !settings.references_runtime then
+                    problem! = "no PackageReference to ghul.runtime"
+                    return null
+                fi
+
+                if referenced.contains('*') \/ referenced.contains('[') \/ referenced.contains('(') then
+                    problem! = "ghul.runtime version {referenced} is a range"
+                    return null
+                fi
+
+                version = referenced
             fi
 
             let options = LIST[string]()
 
-            options.add_range(["--version", settings.version ?? "1.0.0", "--target-framework", target_framework, "--debug", "--msbuild-diagnostics"])
+            options.add_range(["--version", settings.version ?? "1.0.0"])
+
+            if !target? then
+                options.add_range(["--target-framework", target_framework])
+            fi
+
+            options.add_range(["--debug", "--msbuild-diagnostics"])
 
             if settings.global_namespace then
                 options.add("--global-namespace")
@@ -197,6 +275,8 @@ namespace Tester is
             let result = DIRECT_BUILD(compiler, options, version)
 
             result.assembly_name = settings.assembly_name
+            result.target = target
+            result.packages.add_range(settings.packages)
 
             return result
         si
@@ -358,8 +438,16 @@ namespace Tester is
                 settings.option_items.add(include)
             elif name =~ "PackageReference" then
                 if !(include =~ "ghul.runtime") then
-                    problem! = "PackageReference {include}"
-                    return false
+                    let known = settings.known_packages
+
+                    if !known? \/ !known.contains(include.to_lower_invariant()) then
+                        problem! = "PackageReference {include}"
+                        return false
+                    fi
+
+                    settings.packages.add(include.to_lower_invariant())
+
+                    return true
                 fi
 
                 settings.references_runtime = true
@@ -448,8 +536,15 @@ namespace Tester is
         references_runtime: bool public
         runtime_version: string? public
 
+        // Under a target other than dotnet, the packages a library stands
+        // for, which a project may reference; null under dotnet.
+        known_packages: Collections.Set[string]? public
+
+        packages: LIST[string]
+
         init() is
             option_items = LIST[string]()
+            packages = LIST[string]()
         si
     si
 si

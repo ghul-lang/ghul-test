@@ -232,6 +232,8 @@ namespace Tester is
                     target_flags)
 
             queue.run_targets = run_targets
+            queue.build_targets = configuration.build_targets
+            queue.package_flags = configuration.package_flags
 
             for path in requested.paths do
                 if !Directory.exists(path) then

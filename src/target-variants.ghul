@@ -79,8 +79,44 @@ namespace Tester is
                 fi
             od
 
+            for subdirectory in Directory.get_directories(path) do
+                let name = Path.get_file_name(subdirectory)!
+
+                if !is_artifact_directory(name) then
+                    _copy_tree(subdirectory, Path.join(directory, name))
+                fi
+            od
+
             return directory
         si
+
+        // A project's sources can sit in subdirectories of the test, which
+        // the variant needs too. Below the test directory nothing is an
+        // expectation, so everything is copied as it is.
+        _copy_tree(from: string, to: string) static is
+            Directory.create_directory(to)
+
+            for file in Directory.get_files(from) do
+                File.copy(file, Path.join(to, Path.get_file_name(file)!), true)
+            od
+
+            for subdirectory in Directory.get_directories(from) do
+                let name = Path.get_file_name(subdirectory)!
+
+                if !is_artifact_directory(name) then
+                    _copy_tree(subdirectory, Path.join(to, name))
+                fi
+            od
+        si
+
+        // A directory a build or a run leaves behind, or one holding this
+        // runner's variants, none of which a variant should start with.
+        is_artifact_directory(name: string) -> bool static =>
+            name.starts_with(".") \/
+            name =~ "bin" \/
+            name =~ "obj" \/
+            name =~ "out" \/
+            name =~ "formatted"
 
         /// The name `name` is copied under in the `target` variant's
         /// directory, or null where it is not copied: the `targets` and

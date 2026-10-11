@@ -263,7 +263,15 @@ namespace Tester is
                 command.remove_at(0)
                 command.add_range(["--v3"])
                 command.add_range(direct.options)
-                command.add_range(reference_arguments(direct.runtime_path))
+
+                // Another target is given its libraries by the
+                // configuration, and references no assemblies.
+                if direct.target? then
+                    command.add_range(direct.target_options)
+                else
+                    command.add_range(reference_arguments(direct.runtime_path))
+                fi
+
                 command.add_range(test.source_files)
                 command.add_range(["-o", direct.output_name])
 
