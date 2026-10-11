@@ -77,5 +77,35 @@ namespace Tests is
 
             should(threw).be(true, "", [])
         si
+
+        @Test()
+        COMPILER_UNDER_TEST__local_with_a_published_command__does_not_need_a_launcher() is
+            let directory = IO.Directory.create_temp_subdirectory(null).full_name
+
+            let threw mut = false
+
+            try
+                let _ = COMPILER_UNDER_TEST(CompilerRunMode.LOCAL, directory, "dotnet {directory}/ghul.dll")
+            catch ex: Exception
+                threw = true
+            yrt
+
+            should(threw).be(false, "", [])
+        si
+
+        @Test()
+        COMPILER_UNDER_TEST__local_without_a_published_command__needs_a_launcher() is
+            let directory = IO.Directory.create_temp_subdirectory(null).full_name
+
+            let threw mut = false
+
+            try
+                let _ = COMPILER_UNDER_TEST(CompilerRunMode.LOCAL, directory, null)
+            catch ex: Exception
+                threw = true
+            yrt
+
+            should(threw).be(true, "", [])
+        si
     si
 si

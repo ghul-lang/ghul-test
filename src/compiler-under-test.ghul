@@ -60,7 +60,7 @@ namespace Tester is
                 _runtime_path = get_published_compiler_path("ghul-runtime.dll")
                 _sdk_reference_path = discover_sdk_reference_path()
 
-                if let command = _published_command then
+                if let command = _published_command /\ !string.is_null_or_white_space(command) then
                     let words = LIST[string](command.split([' ']) |> filter(word => word.length > 0))
 
                     _executable = words[0]
