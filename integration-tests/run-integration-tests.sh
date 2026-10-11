@@ -941,4 +941,57 @@ fi
 
 echo integration-tests/target-flags: PASS
 
+echo integration-tests/configurations...
+
+# A run names a configuration from the ghul-test.json at or above the working
+# directory, and the configuration says where the compiler and the runtime
+# come from, so CI has no bearing on it. Run from the fixture directory, with
+# CI unset, so nothing but the configuration can be choosing.
+CONFIG_RUNNER="dotnet $(pwd)/bin/Debug/net10.0/ghul-test.dll"
+
+expect_configuration_pass() {
+    local name=$1
+    shift
+
+    (cd integration-tests/configurations && env -u CI TEST_PROCESSES=1 $CONFIG_RUNNER "$@") | tee actual-output
+
+    if [ "${PIPESTATUS[0]}" != "0" ]; then
+        echo integration-tests/configurations: $name failed
+        exit 1
+    fi
+
+    if ! grep -q "all tests passed" actual-output ; then
+        echo integration-tests/configurations: $name did not pass its tests
+        exit 1
+    fi
+}
+
+expect_configuration_problem() {
+    local name=$1 problem=$2
+    shift 2
+
+    (cd integration-tests/configurations && env -u CI TEST_PROCESSES=1 $CONFIG_RUNNER "$@") | tee actual-output
+
+    if [ "${PIPESTATUS[0]}" != "1" ]; then
+        echo integration-tests/configurations: $name did not exit 1
+        exit 1
+    fi
+
+    if ! grep -q "$problem" actual-output ; then
+        echo integration-tests/configurations: $name did not report: $problem
+        exit 1
+    fi
+}
+
+expect_configuration_pass "named" --config tool tests
+expect_configuration_pass "default" tests
+expect_configuration_pass "extended" --config extended tests
+expect_configuration_pass "target flags" --config with-target-flags ../target-flags
+
+expect_configuration_problem "unknown" "has no configuration named nightly" --config nightly tests
+expect_configuration_problem "incomplete" "names its runtime" --config no-runtime tests
+expect_configuration_problem "with --ci" "cannot be given with an option the configuration sets" --config tool --ci tests
+
+echo integration-tests/configurations: PASS
+
 exit 0

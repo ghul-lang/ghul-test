@@ -1,0 +1,182 @@
+namespace Tests is
+    use System.Exception
+
+    use IO.Directory
+    use IO.File
+    use IO.Path
+
+    use Tester
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute
+
+    @TestClass()
+    class RUN_CONFIGURATION_Should is
+        init() is si
+
+        // A fresh directory holding `content` as its ghul-test.json.
+        a_file(content: string) -> string is
+            let directory = Path.join(Path.get_temp_path(), "ghul-test-config-{System.Guid.new_guid()}")
+
+            Directory.create_directory(directory)
+
+            let file = Path.join(directory, RUN_CONFIGURATION.FILE)
+
+            File.write_all_text(file, content)
+
+            return file
+        si
+
+        read_problem(file: string, name: string) -> string is
+            try
+                let _ = RUN_CONFIGURATION.read(file, name)
+            catch ex: Exception
+                return ex.message
+            yrt
+
+            return "no problem"
+        si
+
+        @Test()
+        RUN_CONFIGURATION__read__given_a_published_compiler__names_its_directory_relative_to_the_file() is
+            let file = a_file("{{ \"configurations\": {{ \"local\": {{ \"compiler\": {{ \"publish\": \"publish\" }} }} }} }}")
+
+            let configuration = RUN_CONFIGURATION.read(file, "local")
+
+            should(configuration.build).be("compiler", "", [])
+            should(configuration.uses_tool).be_false("", [])
+            should(configuration.publish_directory ?? "").be(Path.join(Path.get_directory_name(file)!, "publish"), "", [])
+        si
+
+        @Test()
+        RUN_CONFIGURATION__read__given_an_extended_configuration__applies_the_base_beneath_it() is
+            let file = a_file(
+                "{{ \"configurations\": {{ "
+                "\"base\": {{ \"compiler\": \"tool\", \"runtime\": {{ \"path\": \"rt/ghul-runtime.dll\" }} }}, "
+                "\"ci\": {{ \"extends\": \"base\", \"ildasm\": \"tools/ildasm\" }} }} }}")
+
+            let configuration = RUN_CONFIGURATION.read(file, "ci")
+
+            should(configuration.uses_tool).be_true("", [])
+            should(configuration.runtime_path ?? "").be(Path.join([Path.get_directory_name(file)!, "rt", "ghul-runtime.dll"]), "", [])
+            should(configuration.ildasm ?? "").be(Path.join([Path.get_directory_name(file)!, "tools", "ildasm"]), "", [])
+        si
+
+        @Test()
+        RUN_CONFIGURATION__read__given_a_later_setting__lets_it_override_the_base() is
+            let file = a_file(
+                "{{ \"configurations\": {{ "
+                "\"base\": {{ \"compiler\": \"tool\", \"runtime\": {{ \"path\": \"rt.dll\" }} }}, "
+                "\"local\": {{ \"extends\": \"base\", \"compiler\": {{ \"publish\": \"publish\" }}, \"runtime\": \"beside-compiler\" }} }} }}")
+
+            let configuration = RUN_CONFIGURATION.read(file, "local")
+
+            should(configuration.uses_tool).be_false("", [])
+            should(configuration.runtime_path?).be_false("", [])
+        si
+
+        @Test()
+        RUN_CONFIGURATION__read__given_a_configuration_extending_itself__says_so() is
+            let file = a_file("{{ \"configurations\": {{ \"a\": {{ \"extends\": \"b\" }}, \"b\": {{ \"extends\": \"a\" }} }} }}")
+
+            should(read_problem(file, "a")).contain("extends itself", "", [])
+        si
+
+        @Test()
+        RUN_CONFIGURATION__read__given_an_unknown_name__says_so() is
+            let file = a_file("{{ \"configurations\": {{ \"local\": {{ \"compiler\": {{ \"publish\": \"publish\" }} }} }} }}")
+
+            should(read_problem(file, "nightly")).contain("no configuration named nightly", "", [])
+        si
+
+        @Test()
+        RUN_CONFIGURATION__read__given_the_tool_without_a_runtime__says_one_is_needed() is
+            let file = a_file("{{ \"configurations\": {{ \"ci\": {{ \"compiler\": \"tool\" }} }} }}")
+
+            should(read_problem(file, "ci")).contain("names its runtime", "", [])
+        si
+
+        @Test()
+        RUN_CONFIGURATION__read__given_a_compiler_build_with_no_compiler__says_one_is_needed() is
+            let file = a_file("{{ \"configurations\": {{ \"bare\": {{ }} }} }}")
+
+            should(read_problem(file, "bare")).contain("names its compiler", "", [])
+        si
+
+        @Test()
+        RUN_CONFIGURATION__read__given_an_msbuild_build__leaves_the_compiler_to_each_project_or_names_its_command() is
+            let file = a_file(
+                "{{ \"configurations\": {{ "
+                "\"projects\": {{ \"build\": \"msbuild\", \"compiler\": \"project\" }}, "
+                "\"named\": {{ \"build\": \"direct\", \"compiler\": {{ \"path\": \"publish/ghul.dll\" }} }} }} }}")
+
+            should(RUN_CONFIGURATION.read(file, "projects").compiler_command?).be_false("", [])
+
+            let named = RUN_CONFIGURATION.read(file, "named")
+
+            should(named.build).be("direct", "", [])
+            should(named.compiler_command ?? "").be("dotnet {Path.join([Path.get_directory_name(file)!, "publish", "ghul.dll"])}", "", [])
+        si
+
+        @Test()
+        RUN_CONFIGURATION__default_name__reads_the_default() is
+            let file = a_file("{{ \"default\": \"local\", \"configurations\": {{ }} }}")
+
+            should(RUN_CONFIGURATION.default_name(file) ?? "").be("local", "", [])
+        si
+
+        @Test()
+        RUN_CONFIGURATION__read__given_target_libraries__writes_them_to_a_response_file() is
+            let file = a_file(
+                "{{ \"configurations\": {{ \"ci\": {{ "
+                "\"compiler\": {{ \"publish\": \"publish\" }}, "
+                "\"targets\": {{ \"wasm\": {{ \"flags\": \"--define x\", \"libraries\": [ "
+                "{{ \"name\": \"core\", \"root\": [\"missing\", \"core\"], \"sources\": \"src/**/*.ghul\" }}, "
+                "{{ \"name\": \"runtime\", \"root\": \"runtime\", \"sources\": \"@listing.rsp\" }} ] }} }} }} }} }}")
+
+            let base = Path.get_directory_name(file)!
+
+            Directory.create_directory(Path.join([base, "core", "src", "deep"]))
+            File.write_all_text(Path.join(base, "core", "VERSION"), "1.2.3\n")
+            File.write_all_text(Path.join([base, "core", "src", "b.ghul"]), "")
+            File.write_all_text(Path.join([base, "core", "src", "deep", "a.ghul"]), "")
+
+            Directory.create_directory(Path.join(base, "runtime"))
+            File.write_all_text(Path.join(base, "runtime", "VERSION"), "4.5.6")
+            File.write_all_text(Path.join(base, "runtime", "listing.rsp"), "x.ghul\n\ny.ghul\n")
+
+            let flags = RUN_CONFIGURATION.read(file, "ci").target_flags["wasm"]
+
+            should(flags.starts_with("--define x @")).be_true("", [])
+
+            let lines = File.read_all_lines(flags.substring("--define x @".length))
+            let core = Path.join(base, "core")
+            let runtime = Path.join(base, "runtime")
+
+            should(string.join("\n", lines)).be(
+                string.join(
+                    "\n",
+                    [
+                        "--library-source",
+                        "core@1.2.3={core}",
+                        Path.join([core, "src", "b.ghul"]),
+                        Path.join([core, "src", "deep", "a.ghul"]),
+                        "--library-source",
+                        "runtime@4.5.6={runtime}",
+                        Path.join(runtime, "x.ghul"),
+                        Path.join(runtime, "y.ghul")
+                    ]),
+                "", [])
+        si
+
+        @Test()
+        RUN_CONFIGURATION__find_file__finds_the_file_in_a_directory_above() is
+            let file = a_file("{{ \"configurations\": {{ }} }}")
+            let below = Path.join([Path.get_directory_name(file)!, "a", "b"])
+
+            Directory.create_directory(below)
+
+            should(RUN_CONFIGURATION.find_file(below) ?? "").be(file, "", [])
+        si
+    si
+si

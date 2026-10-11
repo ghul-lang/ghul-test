@@ -1,0 +1,581 @@
+namespace Tester is
+    use System.Exception
+
+    use IO.Directory
+    use IO.DirectoryInfo
+    use IO.File
+    use IO.Path
+
+    use Collections.LIST
+    use Collections.MAP
+
+    use System.Text.Json.JsonDocument
+    use System.Text.Json.JsonDocumentOptions
+    use System.Text.Json.JsonCommentHandling
+    use System.Text.Json.JsonElement
+    use System.Text.Json.JsonValueKind
+
+    /// How a run builds each test, and with what: one named configuration
+    /// from a repository's `ghul-test.json`, with whatever it extends
+    /// applied beneath it.
+    class RUN_CONFIGURATION is
+        /// The file a repository's configurations live in, found by
+        /// looking in the working directory and each directory above it.
+        FILE: string static => "ghul-test.json"
+
+        /// The configuration's name.
+        name: string
+
+        /// How each test is built: `compiler`, `msbuild`, `direct` or
+        /// `ghul-cli`.
+        build: string
+
+        /// The directory holding the compiler to run, for a `compiler`
+        /// build that names one rather than using the tool manifest's.
+        publish_directory: string?
+
+        /// Whether a `compiler` build runs the tool manifest's
+        /// `ghul-compiler`.
+        uses_tool: bool
+
+        /// The command a `msbuild` or `direct` build compiles with, or null
+        /// to leave each project to its own.
+        compiler_command: string?
+
+        /// The runtime a test's program runs against, or null for the one
+        /// beside the compiler.
+        runtime_path: string?
+
+        /// The disassembler, or null to use the one ghul-test carries.
+        ildasm: string?
+
+        /// The command that runs ghul-cli, for a `ghul-cli` build.
+        ghul_command: string?
+
+        /// The target a `ghul-cli` build builds each project for.
+        ghul_target: string?
+
+        /// The compiler flags each target adds to a run of a test under it,
+        /// library sources included.
+        target_flags: MAP[string, string]
+
+        init(name: string) is
+            self.name = name
+            build = "compiler"
+            target_flags = MAP[string, string]()
+        si
+
+        /// The file at or above `from`, or null where there is none.
+        ///
+        /// - from: the directory to start looking in
+        find_file(from: string) -> string? static is
+            let directory: DirectoryInfo? mut = DirectoryInfo(from)
+
+            while directory? do
+                let candidate = Path.join(directory.full_name, FILE)
+
+                if File.exists(candidate) then
+                    return candidate
+                fi
+
+                directory = directory.parent
+            od
+
+            return null
+        si
+
+        /// The name of the configuration `file` runs when none is asked
+        /// for, or null where it names none.
+        ///
+        /// - file: a `ghul-test.json`
+        default_name(file: string) -> string? static is
+            let document = _parse(file)
+
+            return string_property(document.root_element, "default")
+        si
+
+        /// The configuration `name` from `file`, with whatever it extends
+        /// applied first. Throws, saying what is wrong, where the file or
+        /// the configuration cannot be used.
+        ///
+        /// - file: a `ghul-test.json`
+        /// - name: the configuration to read
+        read(file: string, name: string) -> RUN_CONFIGURATION static is
+            let document = _parse(file)
+            let base = Path.get_directory_name(Path.get_full_path(file))!
+
+            let configurations: JsonElement mut
+
+            if !document.root_element.try_get_property("configurations", configurations ref) \/ configurations.value_kind != JsonValueKind.OBJECT then
+                throw Exception("{file} has no configurations")
+            fi
+
+            let chain = LIST[JsonElement]()
+            let seen = LIST[string]()
+            let current: string? mut = name
+
+            while let wanted = current do
+                if seen.contains(wanted) then
+                    throw Exception("{file}: configuration {wanted} extends itself")
+                fi
+
+                seen.add(wanted)
+
+                let entry: JsonElement mut
+
+                if !configurations.try_get_property(wanted, entry ref) \/ entry.value_kind != JsonValueKind.OBJECT then
+                    throw Exception("{file} has no configuration named {wanted}")
+                fi
+
+                chain.insert(0, entry)
+                current = string_property(entry, "extends")
+            od
+
+            let result = RUN_CONFIGURATION(name)
+
+            for entry in chain do
+                result._apply(entry, base, file)
+            od
+
+            result._check(file)
+
+            return result
+        si
+
+        _apply(entry: JsonElement, base: string, file: string) is
+            if let build = string_property(entry, "build") then
+                if build !~ "compiler" /\ build !~ "msbuild" /\ build !~ "direct" /\ build !~ "ghul-cli" then
+                    throw Exception("{file}: {name}: build must be compiler, msbuild, direct or ghul-cli, not {build}")
+                fi
+
+                self.build = build
+            fi
+
+            let compiler: JsonElement mut
+
+            if entry.try_get_property("compiler", compiler ref) then
+                _apply_compiler(compiler, base, file)
+            fi
+
+            let runtime: JsonElement mut
+
+            if entry.try_get_property("runtime", runtime ref) then
+                _apply_runtime(runtime, base, file)
+            fi
+
+            if let ildasm = string_property(entry, "ildasm") then
+                self.ildasm = Path.get_full_path(Path.join(base, ildasm))
+            fi
+
+            if let ghul = string_property(entry, "ghul") then
+                ghul_command = ghul
+            fi
+
+            if let target = string_property(entry, "ghul_target") then
+                ghul_target = target
+            fi
+
+            let targets: JsonElement mut
+
+            if entry.try_get_property("targets", targets ref) then
+                if targets.value_kind != JsonValueKind.OBJECT then
+                    throw Exception("{file}: {name}: targets must be an object")
+                fi
+
+                for target in targets.enumerate_object() do
+                    if !TEST_TARGETS.of(target.name)? then
+                        throw Exception("{file}: {name}: {target.name} is not a target ghul-test can run")
+                    fi
+
+                    target_flags[target.name] = TARGET_LIBRARIES.flags(target.value, base, "{file}: {name}: {target.name}")
+                od
+            fi
+        si
+
+        _apply_compiler(compiler: JsonElement, base: string, file: string) is
+            uses_tool = false
+            publish_directory = null
+            compiler_command = null
+
+            if compiler.value_kind == JsonValueKind.STRING then
+                let kind = compiler.get_string()
+
+                if kind =~ "tool" then
+                    uses_tool = true
+                elif kind !~ "project" then
+                    throw Exception("{file}: {name}: compiler must be tool, project, or an object naming publish, path or command")
+                fi
+
+                return
+            fi
+
+            if compiler.value_kind != JsonValueKind.OBJECT then
+                throw Exception("{file}: {name}: compiler must be tool, project, or an object naming publish, path or command")
+            fi
+
+            if let publish = string_property(compiler, "publish") then
+                publish_directory = Path.get_full_path(Path.join(base, publish))
+            elif let path = string_property(compiler, "path") then
+                let full = Path.get_full_path(Path.join(base, path))
+
+                publish_directory = Path.get_directory_name(full)
+                compiler_command = if full.ends_with(".dll") then "dotnet {full}" else full fi
+            elif let command = string_property(compiler, "command") then
+                compiler_command = command
+            else
+                throw Exception("{file}: {name}: compiler must name publish, path or command")
+            fi
+        si
+
+        _apply_runtime(runtime: JsonElement, base: string, file: string) is
+            if runtime.value_kind == JsonValueKind.STRING then
+                if runtime.get_string() !~ "beside-compiler" then
+                    throw Exception("{file}: {name}: runtime must be beside-compiler, or an object naming path or package")
+                fi
+
+                runtime_path = null
+
+                return
+            fi
+
+            if runtime.value_kind != JsonValueKind.OBJECT then
+                throw Exception("{file}: {name}: runtime must be beside-compiler, or an object naming path or package")
+            fi
+
+            if let path = string_property(runtime, "path") then
+                runtime_path = Path.get_full_path(Path.join(base, path))
+            elif let package = string_property(runtime, "package") then
+                runtime_path = RUNTIME_PACKAGE.path(package, runtime, base, "{file}: {name}")
+            else
+                throw Exception("{file}: {name}: runtime must name path or package")
+            fi
+        si
+
+        // The settings each kind of build needs, and the ones it cannot use.
+        _check(file: string) is
+            if build =~ "compiler" then
+                if compiler_command? /\ !publish_directory? then
+                    throw Exception("{file}: {name}: a compiler build runs a published compiler, so its compiler names publish or path rather than a command")
+                fi
+
+                if !uses_tool /\ !publish_directory? then
+                    throw Exception("{file}: {name}: a compiler build names its compiler: tool, or an object naming publish or path")
+                fi
+
+                if uses_tool /\ !runtime_path? then
+                    throw Exception("{file}: {name}: a compiler build using the tool names its runtime")
+                fi
+            elif uses_tool then
+                throw Exception("{file}: {name}: compiler tool applies to a compiler build; a {build} build compiles with project, or names path or command")
+            fi
+
+            if build =~ "ghul-cli" then
+                if compiler_command? \/ publish_directory? then
+                    throw Exception("{file}: {name}: a ghul-cli build takes its compiler from each project's manifest")
+                fi
+            fi
+
+            if build !~ "compiler" /\ target_flags.count > 0 then
+                throw Exception("{file}: {name}: targets apply to a compiler build, where the runner names the target")
+            fi
+        si
+
+        _parse(file: string) -> JsonDocument static is
+            try
+                let options = _[JsonDocumentOptions]
+
+                options.comment_handling = JsonCommentHandling.SKIP
+                options.allow_trailing_commas = true
+
+                return JsonDocument.parse(File.read_all_text(file), options)
+            catch ex: Exception
+                throw Exception("{file} cannot be read: {ex.message}")
+            yrt
+        si
+
+        /// The string `property` of `element` holds, or null where it holds
+        /// none.
+        string_property(element: JsonElement, property: string) -> string? static is
+            let value: JsonElement mut
+
+            if element.try_get_property(property, value ref) /\ value.value_kind == JsonValueKind.STRING then
+                return value.get_string()
+            fi
+
+            return null
+        si
+    si
+
+    /// The compiler flags one target's entry in a configuration adds to a
+    /// run under it: its own `flags`, then a `--library-source` for each of
+    /// its `libraries`, written to a response file.
+    class TARGET_LIBRARIES is
+        /// The flags for `entry`, an object that may hold `flags` and
+        /// `libraries`.
+        ///
+        /// - entry: the target's entry in the configuration
+        /// - base: the directory relative paths are taken from
+        /// - context: what to name in a diagnostic
+        flags(entry: JsonElement, base: string, context: string) -> string static is
+            if entry.value_kind != JsonValueKind.OBJECT then
+                throw Exception("{context} must be an object")
+            fi
+
+            let result = LIST[string]()
+
+            let flags: JsonElement mut
+
+            if entry.try_get_property("flags", flags ref) then
+                if flags.value_kind != JsonValueKind.STRING then
+                    throw Exception("{context}: flags must be a string")
+                fi
+
+                result.add(flags.get_string()!)
+            fi
+
+            let libraries: JsonElement mut
+
+            if entry.try_get_property("libraries", libraries ref) then
+                if libraries.value_kind != JsonValueKind.ARRAY then
+                    throw Exception("{context}: libraries must be an array")
+                fi
+
+                let lines = LIST[string]()
+
+                for library in libraries.enumerate_array() do
+                    lines.add_range(_library_lines(library, base, context))
+                od
+
+                if lines.count > 0 then
+                    let response = Path.get_temp_file_name()
+
+                    File.write_all_lines(response, lines)
+
+                    result.add("@{response}")
+                fi
+            fi
+
+            return string.join(" ", result)
+        si
+
+        // `--library-source`, the library's name, version and root, then
+        // each of its sources: one argument a line, as a response file
+        // holds them.
+        _library_lines(library: JsonElement, base: string, context: string) -> LIST[string] static is
+            if library.value_kind != JsonValueKind.OBJECT then
+                throw Exception("{context}: each library must be an object")
+            fi
+
+            let name = RUN_CONFIGURATION.string_property(library, "name")
+
+            if !name? then
+                throw Exception("{context}: a library has no name")
+            fi
+
+            let root = _root(library, base, "{context}: {name}")
+            let version_file = Path.join(root, "VERSION")
+
+            if !File.exists(version_file) then
+                throw Exception("{context}: {name}: no VERSION in {root}")
+            fi
+
+            let version = File.read_all_text(version_file).trim()
+
+            let lines = LIST[string](["--library-source", "{name}@{version}={root}"])
+
+            let sources: JsonElement mut
+
+            if !library.try_get_property("sources", sources ref) then
+                throw Exception("{context}: {name} names no sources")
+            fi
+
+            let patterns = LIST[string]()
+
+            if sources.value_kind == JsonValueKind.STRING then
+                patterns.add(sources.get_string()!)
+            elif sources.value_kind == JsonValueKind.ARRAY then
+                for pattern in sources.enumerate_array() do
+                    if pattern.value_kind != JsonValueKind.STRING then
+                        throw Exception("{context}: {name}: each source must be a string")
+                    fi
+
+                    patterns.add(pattern.get_string()!)
+                od
+            else
+                throw Exception("{context}: {name}: sources must be a string or an array")
+            fi
+
+            for pattern in patterns do
+                lines.add_range(_sources(root, pattern, "{context}: {name}"))
+            od
+
+            return lines
+        si
+
+        // The first of the library's `root` paths that exists. A run
+        // carries the libraries in a different place in CI and locally,
+        // so a root may list several.
+        _root(library: JsonElement, base: string, context: string) -> string static is
+            let candidates = LIST[string]()
+
+            let root: JsonElement mut
+
+            if library.try_get_property("root", root ref) then
+                if root.value_kind == JsonValueKind.STRING then
+                    candidates.add(root.get_string()!)
+                elif root.value_kind == JsonValueKind.ARRAY then
+                    for candidate in root.enumerate_array() do
+                        if candidate.value_kind == JsonValueKind.STRING then
+                            candidates.add(candidate.get_string()!)
+                        fi
+                    od
+                fi
+            fi
+
+            if candidates.count == 0 then
+                throw Exception("{context}: root must name a directory, or a list of them")
+            fi
+
+            for candidate in candidates do
+                let full = Path.get_full_path(Path.join(base, candidate))
+
+                if Directory.exists(full) then
+                    return full
+                fi
+            od
+
+            throw Exception("{context}: none of its roots exists: {string.join(", ", candidates)}")
+        si
+
+        // The source files `pattern` names under `root`: every file matching
+        // `<dir>/**/<file pattern>` below `<dir>`, sorted, or each path listed
+        // in the response file `@<file>`, taken from the root.
+        _sources(root: string, pattern: string, context: string) -> LIST[string] static is
+            let result = LIST[string]()
+
+            if pattern.starts_with("@") then
+                let listing = Path.join(root, pattern.substring(1))
+
+                if !File.exists(listing) then
+                    throw Exception("{context}: no {pattern.substring(1)} in {root}")
+                fi
+
+                for line in File.read_all_lines(listing) do
+                    let trimmed = line.trim()
+
+                    if trimmed.length > 0 then
+                        result.add(Path.join(root, trimmed))
+                    fi
+                od
+
+                return result
+            fi
+
+            let separator = pattern.index_of("/**/")
+
+            if separator < 0 then
+                throw Exception("{context}: a source pattern is <dir>/**/<files> or @<listing>, not {pattern}")
+            fi
+
+            let directory = Path.join(root, pattern.substring(0, separator))
+            let files = pattern.substring(separator + 4)
+
+            if !Directory.exists(directory) then
+                throw Exception("{context}: no directory {directory}")
+            fi
+
+            let found = LIST[string](Directory.get_files(directory, files, IO.SearchOption.ALL_DIRECTORIES))
+
+            found.sort(System.StringComparer.ordinal)
+
+            result.add_range(found)
+
+            return result
+        si
+    si
+
+    /// The runtime a configuration names by its NuGet package rather than
+    /// by a path: the package's `lib/net10.0/ghul-runtime.dll` in the
+    /// package cache.
+    class RUNTIME_PACKAGE is
+        /// The runtime's path, at the `version` the entry names, or at the
+        /// version the MSBuild file `pinned_in` pins the package to.
+        ///
+        /// - package: the package's id
+        /// - entry: the runtime's entry in the configuration
+        /// - base: the directory relative paths are taken from
+        /// - context: what to name in a diagnostic
+        path(package: string, entry: JsonElement, base: string, context: string) -> string static is
+            let version mut = RUN_CONFIGURATION.string_property(entry, "version")
+
+            if !version? then
+                if let pinned_in = RUN_CONFIGURATION.string_property(entry, "pinned_in") then
+                    version = pinned_version(package, Path.get_full_path(Path.join(base, pinned_in)), context)
+                else
+                    throw Exception("{context}: runtime package {package} names neither version nor pinned_in")
+                fi
+            fi
+
+            let cache =
+                System.Environment.get_environment_variable("NUGET_PACKAGES") ??
+                Path.join(System.Environment.get_folder_path(System.Environment_SpecialFolder.USER_PROFILE), ".nuget", "packages")
+
+            let result = Path.join([cache, package.to_lower_invariant(), version, "lib", "net10.0", "ghul-runtime.dll"])
+
+            if !File.exists(result) then
+                throw Exception("{context}: no {result}; restore a project that references {package} {version} first")
+            fi
+
+            return result
+        si
+
+        /// The version `file` pins `package` to with a `PackageVersion` or
+        /// `PackageReference` item.
+        ///
+        /// - package: the package's id
+        /// - file: an MSBuild file, such as a `Directory.Packages.props`
+        /// - context: what to name in a diagnostic
+        pinned_version(package: string, file: string, context: string) -> string static is
+            if !File.exists(file) then
+                throw Exception("{context}: no {file}")
+            fi
+
+            let pattern =
+                System.Text.RegularExpressions.Regex(
+                    "<Package(?:Version|Reference)\\s+Include=\"{System.Text.RegularExpressions.Regex.escape(package)}\"\\s+Version=\"([^\"]+)\"",
+                    System.Text.RegularExpressions.RegexOptions.IGNORE_CASE)
+
+            let found = pattern.match(File.read_all_text(file))
+
+            if !found.success then
+                throw Exception("{context}: {file} does not pin {package}")
+            fi
+
+            return found.groups[1].value
+        si
+    si
+si
+
+namespace Tester is
+    use IO.Path
+
+    use Ghul.Pipes
+
+    /// What `--compiler` names, read for a run whose configuration builds
+    /// with the compiler directly: the directory the compiler is
+    /// published to, since that run starts the published compiler and
+    /// takes the runtime beside it.
+    class COMPILER_OPTION is
+        /// The directory holding the compiler `command` names: its last
+        /// word, which is the compiler itself where the command is
+        /// `dotnet <path>/ghul.dll`.
+        ///
+        /// - command: what `--compiler` was given
+        publish_directory_of(command: string) -> string static is
+            let words = command.split([' ']) |> filter(word => word.length > 0) |> collect()
+            let compiler = if words.count > 0 then words[words.count - 1] else command fi
+
+            return Path.get_directory_name(Path.get_full_path(compiler)) ?? "."
+        si
+    si
+si
