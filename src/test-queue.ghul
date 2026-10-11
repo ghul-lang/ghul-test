@@ -412,7 +412,7 @@ namespace Tester is
                     fi
                 fi
 
-                let directory = TARGET_VARIANTS.materialize(path, target)
+                let directory = TARGET_VARIANTS.materialize(path, target, _compiler_under_test.is_dotnet_build \/ _compiler_under_test.is_ghul_cli)
 
                 let test =
                     TEST(

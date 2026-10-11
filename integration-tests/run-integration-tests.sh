@@ -884,6 +884,21 @@ fi
 echo integration-tests/build-targets-ghul-cli: PASS
 
 
+echo integration-tests/project-shared...
+
+# A project variant sits beside the test rather than inside it, so a source
+# path the manifest gives relative to the project still reaches the file.
+TEST_PROCESSES=1 $RUNNER --config ghul-cli-build-targets integration-tests/project-shared/app | tee actual-output
+
+if [ "${PIPESTATUS[0]}" != "0" ] || ! grep -q "pass: integration-tests/project-shared/app\[dotnet\]" actual-output ; then
+    echo integration-tests/project-shared did not build the variant against its relative source
+
+    exit 1
+fi
+
+echo integration-tests/project-shared: PASS
+
+
 echo integration-tests/targets-file...
 
 # A test carrying a `targets` file runs once per target it names, in a
