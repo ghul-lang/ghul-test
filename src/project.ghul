@@ -14,15 +14,23 @@ namespace Tester is
         /// The file whose presence makes a directory a project test.
         MANIFEST: string static => "ghul-project.json"
 
-        /// Whether the project is built for the wasm target, and so run by
-        /// Node.
-        is_wasm: bool => target =~ "wasm"
+        /// The target the project is built for, which says how its program
+        /// is run.
+        test_target: TestTarget => TEST_TARGETS.of(target) ?? TestTarget.DOTNET
 
         /// The built program, relative to the test directory: ghul-cli
         /// writes a target's output to `out/<target>/`, named after the
-        /// project. A wasm program's loader sits beside the module.
+        /// project. A wasm program's loader sits beside the module, and a
+        /// native program has no extension.
         binary_path_relative_to_test_folder: string =>
-            Path.join(["out", target, "{name}{if is_wasm then ".wasm" else ".exe" fi}"])
+            Path.join(["out", target, "{name}{_extension}"])
+
+        _extension: string =>
+            case test_target
+            when TestTarget.WASM then ".wasm"
+            when TestTarget.LLVM then ""
+            else ".exe"
+            esac
 
         /// The project in `path`, built for `wanted_target` where that is
         /// given and for its first target otherwise. Null, with the reason
