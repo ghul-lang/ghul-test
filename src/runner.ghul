@@ -225,7 +225,7 @@ namespace Tester is
             if check_file()? then
                 run_check("test output", "run.out", "run.check.out")
             else
-                run_diff("test output", "run.expected", "run.out", "run.diff", true)
+                run_diff("test output", "run.expected", "run.out", "run.diff", ignores_space_in_output)
             fi
 
             run_error_diff("standard error", "run.err", "run.err.diff")
@@ -335,7 +335,7 @@ namespace Tester is
                     "run.expected",
                     "formatted-run.out",
                     "formatted-run.diff",
-                    true
+                    ignores_space_in_output
                 )
             fi
 
@@ -359,6 +359,14 @@ namespace Tester is
         RUN_ARGS: string static => "run.args"
 
         RUN_ERR_EXPECTED: string static => "run.err.expected"
+
+        // A program's output is compared exactly, since spacing is part of
+        // what it writes: alignment and padding regressions show only there.
+        // A test whose output genuinely varies in the amount of whitespace
+        // carries an `ignore-space` file to compare as `diff -b` does.
+        ignores_space_in_output: bool => File.exists(get_path(IGNORE_SPACE))
+
+        IGNORE_SPACE: string static => "ignore-space"
 
         RUN_EXIT_EXPECTED: string static => "run.exit.expected"
 
@@ -489,7 +497,7 @@ namespace Tester is
             normalize_paths(produced)
             strip_stack_trace_locations(produced)
 
-            run_diff(description, RUN_ERR_EXPECTED, produced, diff_file, true)
+            run_diff(description, RUN_ERR_EXPECTED, produced, diff_file, ignores_space_in_output)
         si
 
         // A program whose output is not the same twice cannot be held to a
