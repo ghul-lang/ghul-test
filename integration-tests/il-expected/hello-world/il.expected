@@ -6,7 +6,7 @@
   {
     .entrypoint
     // Code size       11 (0xb)
-    .maxstack  64
+    .maxstack  8
     IL_0000:  ldstr      "hello, world"
     IL_0005:  call       void [System.Console]System.Console::WriteLine(string)
     IL_000a:  ret
