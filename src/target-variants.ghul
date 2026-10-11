@@ -1,0 +1,134 @@
+namespace Tester is
+    use IO.Directory
+    use IO.File
+    use IO.Path
+
+    use Collections.Iterable
+    use Collections.List
+    use Collections.LIST
+    use Ghul.Pipes
+
+    /// A test that carries a `targets` file runs once per target it names,
+    /// each run in a directory of its own under `.targets/<target>/`. The
+    /// directory holds copies of the test's sources and inputs, and its
+    /// expectations resolved for that target: `run.wasm.expected` becomes
+    /// that variant's `run.expected`, and a file naming another target is
+    /// left out.
+    class TARGET_VARIANTS is
+        /// The file naming the targets a test runs under, one or more
+        /// target names separated by spaces or newlines.
+        TARGETS: string static => "targets"
+
+        /// The directory under a test holding one directory per target.
+        DIRECTORY: string static => ".targets"
+
+        /// Whether the test at `path` carries a `targets` file.
+        has(path: string) -> bool static => File.exists(Path.join(path, TARGETS))
+
+        /// Reads the `targets` file of the test at `path`: the targets it
+        /// names, or null with `problem` set where the file cannot be used.
+        read(path: string, flags: string, problem: string? ref) -> List[string]? static is
+            let names =
+                File.read_all_text(Path.join(path, TARGETS))
+                    .split([' ', '\t', '\r', '\n'])
+                    |> filter(name => name.length > 0)
+                    |> collect_list()
+
+            if names.count == 0 then
+                problem! = "{TARGETS} names no target"
+                return null
+            fi
+
+            for name in names do
+                if !TEST_TARGETS.of(name)? then
+                    problem! = "{TARGETS} names {name}, which is not a target ghul-test can run"
+                    return null
+                fi
+            od
+
+            if (names |> collect_set()).count != names.count then
+                problem! = "{TARGETS} names a target twice"
+                return null
+            fi
+
+            if TEST.named_target(flags)? then
+                problem! = "ghulflags names a target and so does {TARGETS}; a test with a {TARGETS} file leaves the target to it"
+                return null
+            fi
+
+            return names
+        si
+
+        /// Builds the directory the `target` variant of the test at `path`
+        /// runs in, and returns its path. An earlier run's directory is
+        /// replaced, so nothing it left behind is read as this run's.
+        materialize(path: string, target: string) -> string static is
+            let directory = Path.join([path, DIRECTORY, target])
+
+            if Directory.exists(directory) then
+                Directory.delete(directory, true)
+            fi
+
+            Directory.create_directory(directory)
+
+            let names = Directory.get_files(path) |> map(file => Path.get_file_name(file)!) |> collect_set()
+
+            for name in names do
+                if let copied = name_in_variant(name, target, names) then
+                    File.copy(Path.join(path, name), Path.join(directory, copied), true)
+                fi
+            od
+
+            return directory
+        si
+
+        /// The name `name` is copied under in the `target` variant's
+        /// directory, or null where it is not copied: the `targets` and
+        /// `ghulflags` files, an artifact a run leaves behind, or an
+        /// expectation for another target. An expectation for this target
+        /// takes the plain name, and shadows the plain file.
+        name_in_variant(name: string, target: string, names: Collections.SET[string]) -> string? static is
+            if name =~ TARGETS \/ name =~ "ghulflags" \/ is_artifact(name) then
+                return null
+            fi
+
+            if !name.ends_with(EXPECTED) then
+                return name
+            fi
+
+            let base = name.substring(0, name.length - EXPECTED.length)
+
+            for candidate in TEST_TARGETS.names do
+                let suffix = ".{candidate}"
+
+                if base.ends_with(suffix) then
+                    return
+                        if candidate =~ target then
+                            "{base.substring(0, base.length - suffix.length)}{EXPECTED}"
+                        else
+                            null
+                        fi
+                fi
+            od
+
+            return if names.contains("{base}.{target}{EXPECTED}") then null else name fi
+        si
+
+        EXPECTED: string static => ".expected"
+
+        // What a run leaves in a test directory, as `RUNNER.clean_up` names
+        // them and as the compiler and the tools name their outputs. Copied
+        // into a variant, a leftover from an earlier run in the test
+        // directory would be read as this run's.
+        is_artifact(name: string) -> bool static =>
+            name =~ "failed" \/
+            name =~ "ghul-runtime.dll" \/
+            name =~ "out.il" \/
+            name.starts_with("binary.") \/
+            name.starts_with("formatted") \/
+            ARTIFACT_EXTENSIONS |> any(extension => name.ends_with(extension))
+
+        ARTIFACT_EXTENSIONS: string[] static =>
+            [".out", ".err", ".grep", ".sort", ".diff", ".exit", ".raw", ".tmp", ".mjs", ".wasm", ".exe", ".dll", ".pdb"]
+    si
+si

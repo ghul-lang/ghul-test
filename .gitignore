@@ -31,3 +31,6 @@ integration-tests/**/formatted/
 integration-tests/**/formatted.exe
 integration-tests/**/formatted.runtimeconfig.json
 publish/
+
+# per-target runs of a test with a targets file
+.targets/

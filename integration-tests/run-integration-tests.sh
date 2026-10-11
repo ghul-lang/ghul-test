@@ -853,4 +853,72 @@ fi
 echo integration-tests/project-tests-target: PASS
 
 
+echo integration-tests/targets-file...
+
+# A test carrying a `targets` file runs once per target it names, in a
+# directory of its own under `.targets/<target>/`, with that target's
+# expectation standing in for the plain one: `run.dotnet.expected` is what the
+# variant is held to, and the `run.expected` beside it says something else.
+TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/targets-file | tee actual-output
+
+if [ "${PIPESTATUS[0]}" != "0" ]; then
+    echo integration-tests/targets-file failed
+
+    exit 1
+fi
+
+if ! diff integration-tests/targets-file/expected-output actual-output ; then
+    echo integration-tests/targets-file output did not match expected output
+
+    exit 1
+fi
+
+if [ ! -f integration-tests/targets-file/hello/.targets/dotnet/run.expected ] ; then
+    echo integration-tests/targets-file did not resolve the expectation into the variant directory
+
+    exit 1
+fi
+
+echo integration-tests/targets-file: PASS
+
+echo integration-tests/targets-file-unknown...
+
+# A `targets` file naming something ghul-test cannot run is reported rather
+# than run under whatever target it would have defaulted to.
+TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/targets-file-unknown | tee actual-output
+
+if [ "${PIPESTATUS[0]}" != "1" ]; then
+    echo integration-tests/targets-file-unknown did not exit 1
+
+    exit 1
+fi
+
+if ! grep -q "not run: integration-tests/targets-file-unknown/hello: targets names wasm32, which is not a target ghul-test can run" actual-output ; then
+    echo integration-tests/targets-file-unknown did not report the unknown target
+
+    exit 1
+fi
+
+echo integration-tests/targets-file-unknown: PASS
+
+echo integration-tests/targets-file-flags...
+
+# A test cannot name its target twice: once in `ghulflags` and again in
+# `targets`.
+TEST_PROCESSES=1 CI=1 $RUNNER integration-tests/targets-file-flags | tee actual-output
+
+if [ "${PIPESTATUS[0]}" != "1" ]; then
+    echo integration-tests/targets-file-flags did not exit 1
+
+    exit 1
+fi
+
+if ! grep -q "not run: integration-tests/targets-file-flags/hello: ghulflags names a target and so does targets" actual-output ; then
+    echo integration-tests/targets-file-flags did not report the target named twice
+
+    exit 1
+fi
+
+echo integration-tests/targets-file-flags: PASS
+
 exit 0

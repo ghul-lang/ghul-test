@@ -9,6 +9,10 @@ namespace Tester is
         is_build_fail_expected: bool,
         tags: Iterable[string]
     ) is
+        init(..) is
+            name = path
+        si
+
         // A library has no entry point, so there is nothing to run and
         // never was: a test that builds one is asserting the shape of
         // what was emitted, not what it does. Running it produces a
@@ -36,6 +40,10 @@ namespace Tester is
             return null
         si
 
+        // What the test is reported as: its path, or for one variant of a
+        // test run under several targets, the path with the target after it.
+        name: string public
+
         has_executed: bool => result? /\ result.is_executed
         has_passed: bool => result? /\ result.is_pass
         has_failed: bool => result? /\ result.is_fail
@@ -56,10 +64,10 @@ namespace Tester is
 
         to_string() -> string is
             if let self.result then
-                return result.format(path)
+                return result.format(name)
             fi
 
-            return "no result: {path}"
+            return "no result: {name}"
         si
     si
 si

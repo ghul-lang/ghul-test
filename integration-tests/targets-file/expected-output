@@ -1,0 +1,6 @@
+using 1 processes to run tests
+ 0% ✅ pass: integration-tests/targets-file/hello[dotnet]
+1 tests discovered
+1 tests enabled
+1/1 tests passed
+✅ all tests passed ✅

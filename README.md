@@ -40,8 +40,11 @@ Optional expectation and configuration files may also be present:
 | `ghulflags` | Mandatory file containing additional command line flags for the compiler. |
 | `disabled*` | Any file beginning with `disabled` causes the test to be skipped. |
 | `tags` | Zero or more whitespace-separated tag names (spaces or newlines), used to select a subset of tests with `--tag`. A test with no `tags` file has no tags. |
+| `targets` | The targets the test runs under, one or more of `dotnet`, `wasm` and `llvm` separated by spaces or newlines. The test is run once per target, reported as `<path>[<target>]`, with `--target <name>` added to its `ghulflags`, which must not name a target itself. Each run happens in its own directory, `.targets/<target>/`, holding copies of the test's sources, inputs and expectations, so the runs neither collide nor leave artifacts in the test directory; the directory is remade on every run. An expectation file may name a target - `run.wasm.expected`, `err.llvm.expected`, `fail.wasm.expected` - and then stands in for the plain file in that target's run alone, so a test holds one `run.expected` for every target and a target-specific one only where the result legitimately differs. Not supported under `--use-dotnet-build` or `--use-ghul-cli`, where the build names the target. |
 
 A basic “hello world” example can be found in the `integration-tests` folder of this repository.
+
+A directory whose name starts with a dot is never a test and is not searched for one, which is what keeps a `.targets/<target>/` directory from being discovered twice.
 
 ## Expectation Comparison Workflow
 
