@@ -18,8 +18,9 @@ namespace Tester is
     /// item is one the runner knows how MSBuild would turn into compiler
     /// arguments; any other project is built with `dotnet build`.
     class DIRECT_BUILD is
-        /// The command that runs the compiler, split into words.
-        compiler: List[string]
+        /// The command the project names to run the compiler, split into
+        /// words, or null where it names none.
+        compiler: List[string]?
 
         /// The compiler options, in the order MSBuild passes them.
         options: List[string]
@@ -27,17 +28,29 @@ namespace Tester is
         /// The version of `ghul.runtime` the project references.
         runtime_version: string
 
+        /// The assembly name the project gives, or null for MSBuild's default.
+        assembly_name: string? public
+
         /// The runtime assembly the program is compiled against and runs with.
         runtime_path: string public
 
-        /// - compiler: the command that runs the compiler, split into words
+        /// The project file, which MSBuild names after each diagnostic.
+        project_path: string public
+
+        /// The file the program is written to, named after the assembly as
+        /// MSBuild names it.
+        output_name: string public
+
+        /// - compiler: the command the project names to run the compiler, or null
         /// - options: the compiler options, in the order MSBuild passes them
         /// - runtime_version: the version of `ghul.runtime` the project references
-        init(compiler: List[string], options: List[string], runtime_version: string) is
+        init(compiler: List[string]?, options: List[string], runtime_version: string) is
             self.compiler = compiler
             self.options = options
             self.runtime_version = runtime_version
             runtime_path = ""
+            project_path = ""
+            output_name = "binary.dll"
         si
 
         /// The direct build for the project in `path`, or null, with the
@@ -89,6 +102,8 @@ namespace Tester is
             fi
 
             result.runtime_path = runtime
+            result.project_path = Path.get_full_path(projects[0])
+            result.output_name = "{result.assembly_name ?? Path.get_file_name_without_extension(projects[0])}.dll"
 
             return result
         si
@@ -158,7 +173,7 @@ namespace Tester is
 
             let options = LIST[string]()
 
-            options.add_range(["--target-framework", target_framework, "--debug"])
+            options.add_range(["--version", settings.version ?? "1.0.0", "--target-framework", target_framework, "--debug", "--msbuild-diagnostics"])
 
             if settings.global_namespace then
                 options.add("--global-namespace")
@@ -177,9 +192,13 @@ namespace Tester is
                 options.add_range(_words(option))
             od
 
-            let compiler = _words(settings.compiler ?? "dotnet ghul-compiler")
+            let compiler: List[string]? = if let named = settings.compiler then _words(named) else null fi
 
-            return DIRECT_BUILD(compiler, options, version)
+            let result = DIRECT_BUILD(compiler, options, version)
+
+            result.assembly_name = settings.assembly_name
+
+            return result
         si
 
         _add_listed(options: LIST[string], flag: string, value: string?) static is
@@ -204,6 +223,11 @@ namespace Tester is
 
             if !root? then
                 problem! = "a project file that is not well-formed"
+                return false
+            fi
+
+            if !is_props /\ !((root.attribute(XName.get("Sdk"))?.value ?? "") =~ "Microsoft.NET.Sdk") then
+                problem! = "Sdk {root.attribute(XName.get("Sdk"))?.value ?? "none"}"
                 return false
             fi
 
@@ -266,6 +290,10 @@ namespace Tester is
                 settings.output_type = value.to_lower_invariant()
             elif name =~ "TargetFramework" then
                 settings.target_framework = value
+            elif name =~ "Version" then
+                settings.version = value
+            elif name =~ "AssemblyName" then
+                settings.assembly_name = value
             elif name =~ "GhulCompiler" then
                 settings.compiler = value
             elif name =~ "GhulGlobalNamespace" then
@@ -284,8 +312,6 @@ namespace Tester is
                 settings.warn_as_info = value
             elif name =~ "GhulOptions" then
                 settings.options_property = value
-            elif _is_ignored_property(name) then
-                return true
             else
                 problem! = "property {name}"
                 return false
@@ -295,11 +321,9 @@ namespace Tester is
         si
 
         // Properties that change nothing about what the compiler is given or
-        // how the program is run here: the assembly's name (the program is
-        // written as binary.exe either way), where `dotnet run` would run it,
-        // and NuGet's own settings.
+        // how the program is run here: where `dotnet run` would run it, and
+        // NuGet's own settings.
         _is_ignored_property(name: string) -> bool static =>
-            name =~ "AssemblyName" \/
             name =~ "RunWorkingDirectory" \/
             name =~ "ManagePackageVersionsCentrally" \/
             name =~ "NoWarn"
@@ -408,6 +432,8 @@ namespace Tester is
         output_type: string? public
         target_framework: string? public
         compiler: string? public
+        assembly_name: string? public
+        version: string? public
         global_namespace: bool public
         underscore_access: string? public
         default_uses: string? public

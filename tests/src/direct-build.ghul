@@ -49,24 +49,24 @@ namespace Tests is
             let build = _build(_task("", ""), _props, _packages)!
 
             should(string.join(" ", build.options)).be(
-                "--target-framework net10.0 --debug --warn-as-error null-deref --suppress impure-function-argument", "", [])
+                "--version 1.0.0 --target-framework net10.0 --debug --msbuild-diagnostics --warn-as-error null-deref --suppress impure-function-argument", "", [])
         si
 
         @Test()
         from_text__given_a_rosetta_task__runs_the_project_s_compiler() is
             let build = _build(_task("", ""), _props, _packages)!
 
-            should(string.join(" ", build.compiler)).be("dotnet ghul-compiler --test-run", "", [])
+            should(string.join(" ", build.compiler!)).be("dotnet ghul-compiler --test-run", "", [])
         si
 
         @Test()
-        from_text__given_no_compiler__runs_the_ghul_compiler_tool() is
+        from_text__given_no_compiler__leaves_the_compiler_to_the_run() is
             let project =
                 "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><OutputType>Exe</OutputType>"
                 "<TargetFramework>net10.0</TargetFramework></PropertyGroup>"
                 "<ItemGroup><GhulSources Include=\"*.ghul\" /></ItemGroup></Project>"
 
-            should(string.join(" ", _build(project, _props, _packages)!.compiler)).be("dotnet ghul-compiler", "", [])
+            should(_build(project, _props, _packages)!.compiler?).be_false("", [])
         si
 
         @Test()
@@ -98,7 +98,7 @@ namespace Tests is
                     _packages)!
 
             should(string.join(" ", build.options)).be(
-                "--target-framework net10.0 --debug --global-namespace --underscore-access protected "
+                "--version 1.0.0 --target-framework net10.0 --debug --msbuild-diagnostics --global-namespace --underscore-access protected "
                 "--default-use Collections,IO.Std.write_line --suppress top-level-statements-not-run,definite-assignment "
                 "--warn-as-error a --warn-as-hint b --warn-as-info c --from-property "
                 "--warn-as-error null-deref --suppress impure-function-argument --from-item", "", [])
@@ -174,6 +174,16 @@ namespace Tests is
             _build(_task("", ""), props, _packages, problem ref)
 
             should(problem ?? "").be("no PackageReference to ghul.runtime", "", [])
+        si
+
+        @Test()
+        from_text__given_another_sdk__needs_msbuild() is
+            should(_problem(_task("", "").replace("Microsoft.NET.Sdk", "Microsoft.NET.Sdk.Web"))).be("Sdk Microsoft.NET.Sdk.Web", "", [])
+        si
+
+        @Test()
+        from_text__takes_the_assembly_name_from_the_project() is
+            should(_build(_task("", ""), _props, _packages)!.assembly_name ?? "").be("binary", "", [])
         si
 
         @Test()

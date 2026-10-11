@@ -114,6 +114,24 @@ namespace Tester is
             _compiler_command = trimmed
         si
 
+        _words(command: string) -> Collections.List[string] =>
+            command.split([' ']) |> filter(word => word.length > 0) |> collect_list()
+
+        // MSBuild's console logger ends each diagnostic with the project
+        // it came from, in brackets. A project test built directly gets the
+        // same, so its diagnostics read as `dotnet build` would have written
+        // them.
+        name_the_project(log: string, project: string) is
+            let diagnostic = System.Text.RegularExpressions.Regex("^.*\\([0-9]+,[0-9]+(,[0-9]+,[0-9]+)?\\): (error|warning|info|message)( [a-z0-9-]+)?: ")
+
+            let lines =
+                File.read_all_lines(log)
+                    |> map(line => if diagnostic.is_match(line) then "{line} [{project}]" else line fi)
+                    |> collect()
+
+            File.write_all_lines(log, lines)
+        si
+
         // Whether a `--use-dotnet-build` run builds a project the runner can
         // read with the compiler alone, rather than with MSBuild.
         build_directly: bool => _build_directly
@@ -213,7 +231,10 @@ namespace Tester is
                 // The command and options MSBuild would have used, with the
                 // project's own runtime, so the program is the one
                 // `dotnet build` would have produced.
-                let command = LIST[string](direct.compiler)
+                // The project's own command wins, then the run's, as with
+                // MSBuild, where a property set in the project overrides the
+                // one the runner hands it.
+                let command = LIST[string](direct.compiler ?? _words(_compiler_command ?? "dotnet ghul-compiler"))
                 let executable = command[0]
 
                 command.remove_at(0)
@@ -221,7 +242,7 @@ namespace Tester is
                 command.add_range(direct.options)
                 command.add_range(reference_arguments(direct.runtime_path))
                 command.add_range(test.source_files)
-                command.add_range(["-o", "binary.exe"])
+                command.add_range(["-o", direct.output_name])
 
                 result = runner.run(
                     executable,
@@ -230,6 +251,8 @@ namespace Tester is
                     null,
                     "compiler.out"
                 )
+
+                name_the_project(runner.get_path("compiler.out"), direct.project_path)
             elif _run_mode == CompilerRunMode.DOTNET then
                 if _compiler_command? then
                     // MSBuild reads environment variables as properties, so
@@ -356,8 +379,8 @@ namespace Tester is
                 return project.binary_path_relative_to_test_folder
             fi
 
-            if runner.direct? then
-                return "binary.exe"
+            if let direct = runner.direct then
+                return direct.output_name
             fi
 
             if _run_mode == CompilerRunMode.DOTNET then
@@ -372,8 +395,8 @@ namespace Tester is
                 return runner.get_path(project.binary_path_relative_to_test_folder)
             fi
 
-            if runner.direct? then
-                return runner.get_path("binary.exe")
+            if let direct = runner.direct then
+                return runner.get_path(direct.output_name)
             fi
 
             if _run_mode == CompilerRunMode.DOTNET then

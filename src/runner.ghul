@@ -659,6 +659,12 @@ namespace Tester is
                     "ghul-runtime.dll"
                 ])
 
+                if let direct = _test.direct then
+                    let stem = Path.get_file_name_without_extension(direct.output_name)
+
+                    delete_files([direct.output_name, "{stem}.pdb", "{stem}.runtimeconfig.json"])
+                fi
+
                 let formatted = Path.join([get_path(), FORMATTED_DIRECTORY])
 
                 if Directory.exists(formatted) then

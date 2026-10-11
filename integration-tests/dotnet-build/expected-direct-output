@@ -1,0 +1,8 @@
+compiler under test: dotnet ghul-compiler
+using 1 processes to run tests
+building 1 of 1 test(s) directly, the rest with dotnet build
+ 0% ✅ pass: integration-tests/dotnet-build/hello-world
+1 tests discovered
+1 tests enabled
+1/1 tests passed
+✅ all tests passed ✅
