@@ -48,6 +48,10 @@ namespace Tester is
         // The project a ghul-cli test builds, or null for any other test.
         project: PROJECT? => _test.project
 
+        // How a project test is built without MSBuild, or null where it is
+        // built with `dotnet build` or is not a project test.
+        direct: DIRECT_BUILD? => _test.direct
+
         init(..) is
             _target =
                 if _test.target() == TestTarget.DOTNET /\ _compiler_under_test.is_dotnet_build then

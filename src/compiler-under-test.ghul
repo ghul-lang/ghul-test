@@ -22,7 +22,7 @@ namespace Tester is
         _publish: string
         _executable: string
         _runtime_path: string
-        _sdk_reference_path: string
+        _sdk_reference_path: string?
         _arguments: Iterable[string]
         _use_dotnet: bool
         _compiler_command: string?
@@ -114,16 +114,41 @@ namespace Tester is
             _compiler_command = trimmed
         si
 
+        // Whether a `--use-dotnet-build` run builds a project the runner can
+        // read with the compiler alone, rather than with MSBuild.
+        build_directly: bool => _build_directly
+        _build_directly: bool
+
+        set_build_directly(directly: bool) is
+            if directly /\ _run_mode != CompilerRunMode.DOTNET then
+                throw Exception("--direct can only be given with --use-dotnet-build")
+            fi
+
+            _build_directly = directly
+        si
+
+        // The target framework the compiler under test targets, which a
+        // project built directly has to name.
+        target_framework: string => get_target_framework()
+
         // With no `-a` the compiler defaults to the SDK reference pack plus
         // the runtime bundled beside the compiler being tested - whatever was
         // current when that compiler was published, not the runtime a test
         // runs against. Any `-a` opts out of that default entirely, so naming
         // the pinned runtime as a reference means naming the whole pack as
         // well.
-        reference_arguments() -> Iterable[string] is
+        reference_arguments() -> Iterable[string] => reference_arguments(_runtime_path)
+
+        reference_arguments(runtime_path: string) -> Iterable[string] is
             let arguments = LIST[string]()
 
-            let pack_dlls = Directory.get_files(_sdk_reference_path, "*.dll") |>
+            // A --use-dotnet-build run finds the pack only once a project is
+            // built directly, since MSBuild finds its own.
+            let reference_path = _sdk_reference_path ?? discover_sdk_reference_path()
+
+            _sdk_reference_path = reference_path
+
+            let pack_dlls = Directory.get_files(reference_path, "*.dll") |>
                 sort() |>
                 collect_list()
 
@@ -133,7 +158,7 @@ namespace Tester is
             od
 
             arguments.add("-a")
-            arguments.add(_runtime_path)
+            arguments.add(runtime_path)
 
             return arguments
         si
@@ -184,6 +209,27 @@ namespace Tester is
                     "compiler.out",
                     null
                 )
+            elif let direct = test.direct then
+                // The command and options MSBuild would have used, with the
+                // project's own runtime, so the program is the one
+                // `dotnet build` would have produced.
+                let command = LIST[string](direct.compiler)
+                let executable = command[0]
+
+                command.remove_at(0)
+                command.add_range(["--v3"])
+                command.add_range(direct.options)
+                command.add_range(reference_arguments(direct.runtime_path))
+                command.add_range(test.source_files)
+                command.add_range(["-o", "binary.exe"])
+
+                result = runner.run(
+                    executable,
+                    command,
+                    RUNNER.BUILD_TIMEOUT_MS,
+                    null,
+                    "compiler.out"
+                )
             elif _run_mode == CompilerRunMode.DOTNET then
                 if _compiler_command? then
                     // MSBuild reads environment variables as properties, so
@@ -229,7 +275,9 @@ namespace Tester is
                 return false
             fi
 
-            if _run_mode != CompilerRunMode.DOTNET /\ _run_mode != CompilerRunMode.GHUL_CLI /\ !runner.read_all_text("compiler.out").contains("*** succeeded ***") then
+            let reports_success = test.direct? \/ (_run_mode != CompilerRunMode.DOTNET /\ _run_mode != CompilerRunMode.GHUL_CLI)
+
+            if reports_success /\ !runner.read_all_text("compiler.out").contains("*** succeeded ***") then
                 throw Exception("compiler success exit status but success message not found in output")
             fi
 
@@ -308,6 +356,10 @@ namespace Tester is
                 return project.binary_path_relative_to_test_folder
             fi
 
+            if runner.direct? then
+                return "binary.exe"
+            fi
+
             if _run_mode == CompilerRunMode.DOTNET then
                 return Path.join(["bin", "Debug", get_target_framework(), "binary.dll"])
             fi
@@ -320,6 +372,10 @@ namespace Tester is
                 return runner.get_path(project.binary_path_relative_to_test_folder)
             fi
 
+            if runner.direct? then
+                return runner.get_path("binary.exe")
+            fi
+
             if _run_mode == CompilerRunMode.DOTNET then
                 return Path.join([runner.get_path(), "bin", "Debug", get_target_framework(), "binary.dll"])
             fi
@@ -328,6 +384,16 @@ namespace Tester is
         si
 
         run_ln_runtime(runner: RUNNER) -> bool is
+            if let direct = runner.direct then
+                return runner.run(
+                    "ln",
+                    ["-s", direct.runtime_path, "."],
+                    RUNNER.TOOL_TIMEOUT_MS,
+                    null,
+                    null
+                ) != 0
+            fi
+
             if _run_mode == CompilerRunMode.DOTNET \/ _run_mode == CompilerRunMode.GHUL_CLI then
                 return true
             fi

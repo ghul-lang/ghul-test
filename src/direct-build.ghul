@@ -1,0 +1,429 @@
+namespace Tester is
+    use IO.File
+    use IO.Path
+    use IO.Directory
+    use IO.DirectoryInfo
+
+    use Collections.LIST
+    use Collections.List
+    use Ghul.Pipes
+
+    use System.Xml.Linq.XDocument
+    use System.Xml.Linq.XElement
+    use System.Xml.Linq.XName
+
+    /// How to build a project test with the compiler alone, without MSBuild:
+    /// the command, the options MSBuild would have passed, and the runtime the
+    /// project references. Made only for a project whose every property and
+    /// item is one the runner knows how MSBuild would turn into compiler
+    /// arguments; any other project is built with `dotnet build`.
+    class DIRECT_BUILD is
+        /// The command that runs the compiler, split into words.
+        compiler: List[string]
+
+        /// The compiler options, in the order MSBuild passes them.
+        options: List[string]
+
+        /// The version of `ghul.runtime` the project references.
+        runtime_version: string
+
+        /// The runtime assembly the program is compiled against and runs with.
+        runtime_path: string public
+
+        /// - compiler: the command that runs the compiler, split into words
+        /// - options: the compiler options, in the order MSBuild passes them
+        /// - runtime_version: the version of `ghul.runtime` the project references
+        init(compiler: List[string], options: List[string], runtime_version: string) is
+            self.compiler = compiler
+            self.options = options
+            self.runtime_version = runtime_version
+            runtime_path = ""
+        si
+
+        /// The direct build for the project in `path`, or null, with the
+        /// reason in `problem`, where it has to be built with MSBuild.
+        ///
+        /// - path: the test directory, holding one `.ghulproj`
+        /// - target_framework: the framework the compiler targets, such as `net10.0`
+        /// - problem: set to why the project needs MSBuild, or null
+        read(path: string, target_framework: string, problem: string? ref) -> DIRECT_BUILD? static is
+            problem! = null
+
+            let projects = Directory.get_files(path, "*.ghulproj")
+
+            if projects.count != 1 then
+                problem! = "{projects.count} project files"
+                return null
+            fi
+
+            if _find_upwards(path, "Directory.Build.targets")? then
+                problem! = "Directory.Build.targets"
+                return null
+            fi
+
+            let props = _read_upwards(path, "Directory.Build.props")
+            let packages = _read_upwards(path, "Directory.Packages.props")
+
+            let result = from_text(File.read_all_text(projects[0]), props, packages, target_framework, problem)
+
+            if !result? then
+                return null
+            fi
+
+            let runtime = _runtime_path(result.runtime_version, target_framework)
+
+            if !File.exists(runtime) then
+                problem! = "ghul.runtime {result.runtime_version} is not restored"
+                return null
+            fi
+
+            // The runner hands the compiler the test directory's own sources;
+            // a recursive glob that reaches further is MSBuild's to expand.
+            let nested =
+                Directory.get_directories(path)
+                    |> any(directory => Directory.get_files(directory, "*.ghul", IO.SearchOption.ALL_DIRECTORIES).count > 0)
+
+            if nested then
+                problem! = "sources in a subdirectory"
+                return null
+            fi
+
+            result.runtime_path = runtime
+
+            return result
+        si
+
+        /// The direct build a project file describes, given the text of the
+        /// `Directory.Build.props` and `Directory.Packages.props` that apply
+        /// to it, or null, with the reason in `problem`, where it has to be
+        /// built with MSBuild.
+        ///
+        /// - project: the text of the `.ghulproj`
+        /// - props: the text of the nearest `Directory.Build.props`, or null
+        /// - packages: the text of the nearest `Directory.Packages.props`, or null
+        /// - target_framework: the framework the compiler targets, such as `net10.0`
+        /// - problem: set to why the project needs MSBuild, or null
+        from_text(
+            project: string,
+            props: string?,
+            packages: string?,
+            target_framework: string,
+            problem: string? ref
+        ) -> DIRECT_BUILD? static is
+            problem! = null
+
+            let settings = _SETTINGS()
+
+            if let text = props then
+                if !_read_file(text, true, settings, problem) then
+                    return null
+                fi
+            fi
+
+            if !_read_file(project, false, settings, problem) then
+                return null
+            fi
+
+            if !settings.has_sources then
+                problem! = "no GhulSources"
+                return null
+            fi
+
+            if !((settings.output_type ?? "") =~ "exe") then
+                problem! = "OutputType is not Exe"
+                return null
+            fi
+
+            if !((settings.target_framework ?? "") =~ target_framework) then
+                problem! = "TargetFramework is not {target_framework}"
+                return null
+            fi
+
+            let version = settings.runtime_version ?? _central_version(packages)
+
+            if !version? then
+                problem! = "no version for ghul.runtime"
+                return null
+            fi
+
+            if !settings.references_runtime then
+                problem! = "no PackageReference to ghul.runtime"
+                return null
+            fi
+
+            if version.contains('*') \/ version.contains('[') \/ version.contains('(') then
+                problem! = "ghul.runtime version {version} is a range"
+                return null
+            fi
+
+            let options = LIST[string]()
+
+            options.add_range(["--target-framework", target_framework, "--debug"])
+
+            if settings.global_namespace then
+                options.add("--global-namespace")
+            fi
+
+            _add_listed(options, "--underscore-access", settings.underscore_access)
+            _add_listed(options, "--default-use", settings.default_uses)
+            _add_listed(options, "--suppress", settings.no_warn)
+            _add_listed(options, "--warn-as-error", settings.warn_as_error)
+            _add_listed(options, "--warn-as-hint", settings.warn_as_hint)
+            _add_listed(options, "--warn-as-info", settings.warn_as_info)
+
+            options.add_range(_words(settings.options_property ?? ""))
+
+            for option in settings.option_items do
+                options.add_range(_words(option))
+            od
+
+            let compiler = _words(settings.compiler ?? "dotnet ghul-compiler")
+
+            return DIRECT_BUILD(compiler, options, version)
+        si
+
+        _add_listed(options: LIST[string], flag: string, value: string?) static is
+            if let listed = value then
+                options.add(flag)
+                options.add(listed.replace(';', ','))
+            fi
+        si
+
+        _words(text: string) -> LIST[string] static =>
+            text.split([' ', '\t', '\r', '\n'])
+                |> map(word => word.trim('"'))
+                |> filter(word => word.length > 0)
+                |> collect_list()
+
+        // Reads the properties and items of one file into `settings`, later
+        // files overriding earlier ones as MSBuild's evaluation does. False,
+        // with the reason in `problem`, where the file holds anything the
+        // runner cannot be sure it reads as MSBuild would.
+        _read_file(text: string, is_props: bool, settings: _SETTINGS, problem: string? ref) -> bool static is
+            let root = _parse(text)?.root
+
+            if !root? then
+                problem! = "a project file that is not well-formed"
+                return false
+            fi
+
+            for group in root.elements() do
+                let group_name = group.name.local_name
+
+                if group.attribute(XName.get("Condition"))? then
+                    problem! = "a Condition"
+                    return false
+                fi
+
+                if group_name =~ "PropertyGroup" then
+                    for property in group.elements() do
+                        if !_read_property(property, settings, problem) then
+                            return false
+                        fi
+                    od
+                elif group_name =~ "ItemGroup" then
+                    for item in group.elements() do
+                        if !_read_item(item, settings, problem) then
+                            return false
+                        fi
+                    od
+                else
+                    problem! = "a {group_name} element"
+                    return false
+                fi
+            od
+
+            return true
+        si
+
+        _parse(text: string) -> XDocument? static is
+            try
+                return XDocument.parse(text)
+            catch e: System.Xml.XmlException
+                return null
+            yrt
+        si
+
+        _read_property(property: XElement, settings: _SETTINGS, problem: string? ref) -> bool static is
+            let name = property.name.local_name
+            let value = property.value.trim()
+
+            if property.attribute(XName.get("Condition"))? then
+                problem! = "a Condition on {name}"
+                return false
+            fi
+
+            if _is_ignored_property(name) then
+                return true
+            fi
+
+            if value.contains("$(") \/ value.contains("@(") \/ value.contains("%(") then
+                problem! = "an MSBuild expression in {name}"
+                return false
+            fi
+
+            if name =~ "OutputType" then
+                settings.output_type = value.to_lower_invariant()
+            elif name =~ "TargetFramework" then
+                settings.target_framework = value
+            elif name =~ "GhulCompiler" then
+                settings.compiler = value
+            elif name =~ "GhulGlobalNamespace" then
+                settings.global_namespace = value.to_lower_invariant() =~ "true"
+            elif name =~ "GhulUnderscoreAccess" then
+                settings.underscore_access = value
+            elif name =~ "GhulDefaultUses" then
+                settings.default_uses = value
+            elif name =~ "GhulNoWarn" then
+                settings.no_warn = value
+            elif name =~ "GhulWarnAsError" then
+                settings.warn_as_error = value
+            elif name =~ "GhulWarnAsHint" then
+                settings.warn_as_hint = value
+            elif name =~ "GhulWarnAsInfo" then
+                settings.warn_as_info = value
+            elif name =~ "GhulOptions" then
+                settings.options_property = value
+            elif _is_ignored_property(name) then
+                return true
+            else
+                problem! = "property {name}"
+                return false
+            fi
+
+            return true
+        si
+
+        // Properties that change nothing about what the compiler is given or
+        // how the program is run here: the assembly's name (the program is
+        // written as binary.exe either way), where `dotnet run` would run it,
+        // and NuGet's own settings.
+        _is_ignored_property(name: string) -> bool static =>
+            name =~ "AssemblyName" \/
+            name =~ "RunWorkingDirectory" \/
+            name =~ "ManagePackageVersionsCentrally" \/
+            name =~ "NoWarn"
+
+        _read_item(item: XElement, settings: _SETTINGS, problem: string? ref) -> bool static is
+            let name = item.name.local_name
+            let include = item.attribute(XName.get("Include"))?.value ?? ""
+
+            for attribute in item.attributes() do
+                let attribute_name = attribute.name.local_name
+
+                if !(attribute_name =~ "Include") /\ !(name =~ "PackageReference" /\ attribute_name =~ "Version") then
+                    problem! = "{attribute_name} on {name}"
+                    return false
+                fi
+            od
+
+            if item.has_elements then
+                problem! = "metadata on {name}"
+                return false
+            fi
+
+            if name =~ "GhulSources" then
+                if !(include =~ "**/*.ghul") /\ !(include =~ "*.ghul") then
+                    problem! = "GhulSources {include}"
+                    return false
+                fi
+
+                settings.has_sources = true
+                settings.recursive_sources = settings.recursive_sources \/ include =~ "**/*.ghul"
+            elif name =~ "GhulOptions" then
+                settings.option_items.add(include)
+            elif name =~ "PackageReference" then
+                if !(include =~ "ghul.runtime") then
+                    problem! = "PackageReference {include}"
+                    return false
+                fi
+
+                settings.references_runtime = true
+
+                if let version = item.attribute(XName.get("Version")) then
+                    settings.runtime_version = version.value
+                fi
+            else
+                problem! = "item {name}"
+                return false
+            fi
+
+            return true
+        si
+
+        _central_version(packages: string?) -> string? static is
+            if !packages? then
+                return null
+            fi
+
+            try
+                for element in XDocument.parse(packages).descendants() do
+                    if element.name.local_name =~ "PackageVersion" /\ element.attribute(XName.get("Include"))?.value =~ "ghul.runtime" then
+                        return element.attribute(XName.get("Version"))?.value
+                    fi
+                od
+            catch e: System.Xml.XmlException
+                return null
+            yrt
+
+            return null
+        si
+
+        _find_upwards(path: string, file_name: string) -> string? static is
+            let directory: DirectoryInfo? mut = DirectoryInfo(Path.get_full_path(path))
+
+            while let current = directory do
+                let candidate = Path.join(current.full_name, file_name)
+
+                if File.exists(candidate) then
+                    return candidate
+                fi
+
+                directory = current.parent
+            od
+
+            return null
+        si
+
+        _read_upwards(path: string, file_name: string) -> string? static is
+            if let found = _find_upwards(path, file_name) then
+                return File.read_all_text(found)
+            fi
+
+            return null
+        si
+
+        _runtime_path(version: string, target_framework: string) -> string static is
+            let packages =
+                System.Environment.get_environment_variable("NUGET_PACKAGES") ??
+                Path.join(System.Environment.get_folder_path(System.Environment_SpecialFolder.USER_PROFILE), ".nuget", "packages")
+
+            return Path.join([packages, "ghul.runtime", version.to_lower_invariant(), "lib", target_framework, "ghul-runtime.dll"])
+        si
+    si
+
+    // What the project files say, accumulated across them in the order
+    // MSBuild evaluates them.
+    class _SETTINGS is
+        output_type: string? public
+        target_framework: string? public
+        compiler: string? public
+        global_namespace: bool public
+        underscore_access: string? public
+        default_uses: string? public
+        no_warn: string? public
+        warn_as_error: string? public
+        warn_as_hint: string? public
+        warn_as_info: string? public
+        options_property: string? public
+        option_items: LIST[string]
+        has_sources: bool public
+        recursive_sources: bool public
+        references_runtime: bool public
+        runtime_version: string? public
+
+        init() is
+            option_items = LIST[string]()
+        si
+    si
+si

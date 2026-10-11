@@ -18,7 +18,7 @@ namespace Tester is
             Std.output_encoding = UTF8Encoding()
 
             if arguments.count == 0 then
-                Std.write_line("usage: ghul-test [--ci|--no-ci] [--tag <name>]... [--not-tag <name>]... [--shard <index>/<count>] <test-folder>...")
+                Std.write_line("usage: ghul-test [--use-dotnet-build [--direct]] [--ci|--no-ci] [--tag <name>]... [--not-tag <name>]... [--shard <index>/<count>] <test-folder>...")
                 return 1
             fi
 
@@ -41,6 +41,10 @@ namespace Tester is
             // takes the compiler from the build rather than from either source
             // `--ci` and `--no-ci` choose between.
             let build_mode: CompilerRunMode? mut = null
+
+            // Whether `--use-dotnet-build` builds a project the runner can
+            // read with the compiler alone, rather than with MSBuild.
+            let build_directly mut = false
 
             let run_mode mut =
                 if ci_string =~ "1" \/ ci_string.to_lower() =~ "true" then
@@ -74,6 +78,8 @@ namespace Tester is
 
                 if arg =~ "--use-dotnet-build" then
                     build_mode = CompilerRunMode.DOTNET
+                elif arg =~ "--direct" then
+                    build_directly = true
                 elif arg =~ "--use-ghul-cli" then
                     build_mode = CompilerRunMode.GHUL_CLI
                 elif arg =~ "--ci" then
@@ -188,6 +194,7 @@ namespace Tester is
                 compiler_under_test.set_runtime_path(runtime_dll_override)
                 compiler_under_test.set_compiler_command(compiler_override)
                 compiler_under_test.set_ghul_command(ghul_command)
+                compiler_under_test.set_build_directly(build_directly)
                 compiler_under_test.project_target = project_target
 
                 disassembler = DISASSEMBLER(ildasm_override)

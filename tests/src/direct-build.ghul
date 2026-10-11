@@ -1,0 +1,184 @@
+namespace Tests is
+    use Tester
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute
+
+    @TestClass()
+    class DIRECT_BUILD_Should is
+
+        init() is si
+
+        _task(properties: string, items: string) -> string =>
+            "<Project Sdk=\"Microsoft.NET.Sdk\">"
+            "<PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework>"
+            "<AssemblyName>binary</AssemblyName><GhulCompiler>dotnet ghul-compiler --test-run</GhulCompiler>"
+            "{properties}</PropertyGroup>"
+            "<ItemGroup><GhulSources Include=\"**/*.ghul\" />{items}</ItemGroup>"
+            "</Project>"
+
+        _props: string =>
+            "<Project><PropertyGroup><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>"
+            "<NoWarn>NU1507</NoWarn></PropertyGroup>"
+            "<ItemGroup><PackageReference Include=\"ghul.runtime\" />"
+            "<GhulOptions Include=\"--warn-as-error null-deref\" />"
+            "<GhulOptions Include=\"--suppress impure-function-argument\" /></ItemGroup></Project>"
+
+        _packages: string =>
+            "<Project><ItemGroup><PackageVersion Include=\"ghul.runtime\" Version=\"24.0.1\" /></ItemGroup></Project>"
+
+        _build(project: string, props: string?, packages: string?) -> DIRECT_BUILD? is
+            let problem: string? mut = null
+
+            return _build(project, props, packages, problem ref)
+        si
+
+        _build(project: string, props: string?, packages: string?, problem: string? ref) -> DIRECT_BUILD? =>
+            DIRECT_BUILD.from_text(project, props, packages, "net10.0", problem)
+
+        _problem(project: string) -> string is
+            let problem: string? mut = null
+
+            _build(project, _props, _packages, problem ref)
+
+            return problem ?? ""
+        si
+
+        @Test()
+        from_text__given_a_rosetta_task__has_the_options_msbuild_passes() is
+            let build = _build(_task("", ""), _props, _packages)!
+
+            should(string.join(" ", build.options)).be(
+                "--target-framework net10.0 --debug --warn-as-error null-deref --suppress impure-function-argument", "", [])
+        si
+
+        @Test()
+        from_text__given_a_rosetta_task__runs_the_project_s_compiler() is
+            let build = _build(_task("", ""), _props, _packages)!
+
+            should(string.join(" ", build.compiler)).be("dotnet ghul-compiler --test-run", "", [])
+        si
+
+        @Test()
+        from_text__given_no_compiler__runs_the_ghul_compiler_tool() is
+            let project =
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><OutputType>Exe</OutputType>"
+                "<TargetFramework>net10.0</TargetFramework></PropertyGroup>"
+                "<ItemGroup><GhulSources Include=\"*.ghul\" /></ItemGroup></Project>"
+
+            should(string.join(" ", _build(project, _props, _packages)!.compiler)).be("dotnet ghul-compiler", "", [])
+        si
+
+        @Test()
+        from_text__takes_the_runtime_version_from_central_package_management() is
+            should(_build(_task("", ""), _props, _packages)!.runtime_version).be("24.0.1", "", [])
+        si
+
+        @Test()
+        from_text__takes_a_version_on_the_reference_over_the_central_one() is
+            let props = _props.replace("<PackageReference Include=\"ghul.runtime\" />", "<PackageReference Include=\"ghul.runtime\" Version=\"25.0.0\" />")
+
+            should(_build(_task("", ""), props, _packages)!.runtime_version).be("25.0.0", "", [])
+        si
+
+        @Test()
+        from_text__maps_the_ghul_properties_to_their_flags() is
+            let build =
+                _build(
+                    _task(
+                        "<GhulGlobalNamespace>true</GhulGlobalNamespace>"
+                        "<GhulNoWarn>top-level-statements-not-run;definite-assignment</GhulNoWarn>"
+                        "<GhulWarnAsError>a</GhulWarnAsError><GhulWarnAsHint>b</GhulWarnAsHint><GhulWarnAsInfo>c</GhulWarnAsInfo>"
+                        "<GhulDefaultUses>Collections;IO.Std.write_line</GhulDefaultUses>"
+                        "<GhulUnderscoreAccess>protected</GhulUnderscoreAccess>"
+                        "<GhulOptions>--from-property</GhulOptions>"
+                        "<RunWorkingDirectory>$(MSBuildProjectDirectory)</RunWorkingDirectory>",
+                        "<GhulOptions Include=\"--from-item\" />"),
+                    _props,
+                    _packages)!
+
+            should(string.join(" ", build.options)).be(
+                "--target-framework net10.0 --debug --global-namespace --underscore-access protected "
+                "--default-use Collections,IO.Std.write_line --suppress top-level-statements-not-run,definite-assignment "
+                "--warn-as-error a --warn-as-hint b --warn-as-info c --from-property "
+                "--warn-as-error null-deref --suppress impure-function-argument --from-item", "", [])
+        si
+
+        @Test()
+        from_text__given_another_package_reference__needs_msbuild() is
+            should(_problem(_task("", "<PackageReference Include=\"ghul.raster\" />"))).be("PackageReference ghul.raster", "", [])
+        si
+
+        @Test()
+        from_text__given_a_property_it_does_not_know__needs_msbuild() is
+            should(_problem(_task("<TieredCompilation>false</TieredCompilation>", ""))).be("property TieredCompilation", "", [])
+        si
+
+        @Test()
+        from_text__given_a_condition__needs_msbuild() is
+            let project = _task("", "").replace("<ItemGroup>", "<ItemGroup Condition=\"'$(X)' == 'y'\">")
+
+            should(_problem(project)).be("a Condition", "", [])
+        si
+
+        @Test()
+        from_text__given_an_expression_in_a_property_it_reads__needs_msbuild() is
+            should(_problem(_task("<GhulNoWarn>$(Inherited)</GhulNoWarn>", ""))).be("an MSBuild expression in GhulNoWarn", "", [])
+        si
+
+        @Test()
+        from_text__given_other_sources__needs_msbuild() is
+            should(_problem(_task("", "<GhulSources Include=\"../shared/*.ghul\" />"))).be("GhulSources ../shared/*.ghul", "", [])
+        si
+
+        @Test()
+        from_text__given_an_import__needs_msbuild() is
+            let project = _task("", "").replace("</Project>", "<Import Project=\"more.props\" /></Project>")
+
+            should(_problem(project)).be("a Import element", "", [])
+        si
+
+        @Test()
+        from_text__given_a_library__needs_msbuild() is
+            should(_problem(_task("", "").replace("<OutputType>Exe</OutputType>", "<OutputType>Library</OutputType>"))).be("OutputType is not Exe", "", [])
+        si
+
+        @Test()
+        from_text__given_another_target_framework__needs_msbuild() is
+            should(_problem(_task("", "").replace("net10.0", "net8.0"))).be("TargetFramework is not net10.0", "", [])
+        si
+
+        @Test()
+        from_text__given_no_runtime_version__needs_msbuild() is
+            let problem: string? mut = null
+
+            _build(_task("", ""), _props, null, problem ref)
+
+            should(problem ?? "").be("no version for ghul.runtime", "", [])
+        si
+
+        @Test()
+        from_text__given_a_floating_runtime_version__needs_msbuild() is
+            let problem: string? mut = null
+
+            _build(_task("", ""), _props, _packages.replace("24.0.1", "24.*"), problem ref)
+
+            should(problem ?? "").be("ghul.runtime version 24.* is a range", "", [])
+        si
+
+        @Test()
+        from_text__given_no_runtime_reference__needs_msbuild() is
+            let props = _props.replace("<PackageReference Include=\"ghul.runtime\" />", "")
+            let problem: string? mut = null
+
+            _build(_task("", ""), props, _packages, problem ref)
+
+            should(problem ?? "").be("no PackageReference to ghul.runtime", "", [])
+        si
+
+        @Test()
+        from_text__given_a_file_that_is_not_xml__needs_msbuild() is
+            should(_problem("<Project>")).be("a project file that is not well-formed", "", [])
+        si
+    si
+si
