@@ -60,7 +60,7 @@ namespace Tester is
             return result
         si
 
-        to_string() -> string => format(test.path)
+        to_string() -> string => format(test.name)
     si
 
     class SKIP: Result is

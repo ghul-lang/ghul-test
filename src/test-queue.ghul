@@ -95,7 +95,7 @@ namespace Tester is
 
                 // `queue` returns once the task is running, so this reports a
                 // test that has actually started, not one waiting for a slot.
-                _progress_reporter.on_start(test.path)
+                _progress_reporter.on_start(test.name)
             od
 
             let results mut = _task_queue.drain()
@@ -131,8 +131,10 @@ namespace Tester is
                 entries.sort()
 
                 for entry in entries do
-                    // FIXME: appears not to be needed:
-                    if entry =~ "." \/ entry =~ ".." \/ entry =~ "template" then
+                    // A directory whose name starts with a dot holds something
+                    // about a test rather than a test: the per-target
+                    // directories of one run under several targets.
+                    if Path.get_file_name(entry)!.starts_with(".") then
                         continue
                     fi
 
@@ -190,6 +192,11 @@ namespace Tester is
             let flags = if File.exists(flags_path) then File.read_all_text(flags_path) else "" fi
             let source_files = get_source_files(path)
             let is_build_failure_expected = File.exists("{path}/fail.expected")
+
+            if TARGET_VARIANTS.has(path) then
+                queue_variants(path, flags, tags)
+                return
+            fi
 
             let test =
                 TEST(
@@ -274,6 +281,43 @@ namespace Tester is
 
         queue_test(test: TEST) is
             _tests.add(test)
+        si
+
+        // One test for each target a `targets` file names, each in its own
+        // directory with the expectations resolved for that target, and the
+        // target added to the flags. The tags are the one test's, and so is
+        // the shard ordinal, so a shard holds every variant or none.
+        queue_variants(path: string, flags: string, tags: Iterable[string]) is
+            if _compiler_under_test.is_dotnet_build \/ _compiler_under_test.is_ghul_cli then
+                _undiscovered.add("{path}: a {TARGET_VARIANTS.TARGETS} file is not supported under --use-dotnet-build or --use-ghul-cli, where the build names the target")
+                return
+            fi
+
+            let problem: string? mut = null
+
+            let targets = TARGET_VARIANTS.read(path, flags, problem ref)
+
+            if !targets? then
+                _undiscovered.add("{path}: {problem}")
+                return
+            fi
+
+            for target in targets do
+                let directory = TARGET_VARIANTS.materialize(path, target)
+
+                let test =
+                    TEST(
+                        directory,
+                        get_source_files(directory),
+                        "{flags.trim()} --target {target}",
+                        File.exists("{directory}/fail.expected"),
+                        tags
+                    )
+
+                test.name = "{path}[{target}]"
+
+                queue_test(test)
+            od
         si
 
         get_source_files(path: string) -> Iterable[string] =>
