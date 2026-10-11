@@ -26,6 +26,15 @@
             "extends": "tool",
             "run_targets": ["cobol"]
         },
+        "build-targets": {
+            "extends": "tool",
+            "build_targets": ["dotnet", "wasm"],
+            "run_targets": ["dotnet"]
+        },
+        "build-targets-unknown": {
+            "extends": "tool",
+            "build_targets": ["dotnet", "cobol"]
+        },
         "no-runtime": {
             "compiler": "tool"
         }

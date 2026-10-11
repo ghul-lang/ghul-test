@@ -109,6 +109,38 @@ namespace Tests is
             should(_problem(_task("", "<PackageReference Include=\"ghul.raster\" />"))).be("PackageReference ghul.raster", "", [])
         si
 
+        _build_for(target: string, project: string, problem: string? ref) -> DIRECT_BUILD? =>
+            DIRECT_BUILD.from_text(project, _props, null, "net10.0", target, Collections.SET[string](["ghul.raster"]), problem)
+
+        @Test()
+        from_text__for_another_target__leaves_out_the_target_framework() is
+            let problem: string? mut = null
+
+            let build = _build_for("wasm", _task("", ""), problem ref)!
+
+            should(string.join(" ", build.options)).be(
+                "--version 1.0.0 --debug --msbuild-diagnostics --warn-as-error null-deref --suppress impure-function-argument", "", [])
+        si
+
+        @Test()
+        from_text__for_another_target__accepts_a_package_a_library_stands_for() is
+            let problem: string? mut = null
+
+            let build = _build_for("llvm", _task("", "<PackageReference Include=\"ghul.raster\" />"), problem ref)!
+
+            should(string.join(" ", build.packages)).be("ghul.raster", "", [])
+            should(build.target ?? "").be("llvm", "", [])
+        si
+
+        @Test()
+        from_text__for_another_target__refuses_a_package_no_library_stands_for() is
+            let problem: string? mut = null
+
+            _build_for("llvm", _task("", "<PackageReference Include=\"ghul.cli\" />"), problem ref)
+
+            should(problem ?? "").be("PackageReference ghul.cli", "", [])
+        si
+
         @Test()
         from_text__given_a_property_it_does_not_know__needs_msbuild() is
             should(_problem(_task("<TieredCompilation>false</TieredCompilation>", ""))).be("property TieredCompilation", "", [])

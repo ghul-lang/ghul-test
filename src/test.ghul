@@ -19,17 +19,25 @@ namespace Tester is
 
         // The target the test is built for: said by its project where it is
         // one, or by its flags, and .NET where neither names one.
-        target() -> TestTarget => project?.test_target ?? named_target(flags) ?? TestTarget.DOTNET
+        target() -> TestTarget => build_target ?? project?.test_target ?? named_target(flags) ?? TestTarget.DOTNET
+
+        // The target a variant of the test is built for, where the runner
+        // chose it rather than the test's flags or project.
+        build_target: TestTarget? public
 
         // The target `options`, compiler options as a command line or a
         // project file holds them, select with `--target`, or null where
         // they name none.
-        named_target(options: string) -> TestTarget? static is
+        named_target(options: string) -> TestTarget? static =>
+            if let name = named_target_name(options) then TEST_TARGETS.of(name) else null fi
+
+        // The name `options` gives the target with `--target`, or null.
+        named_target_name(options: string) -> string? static is
             let words = options.split([' ', '\t', '\r', '\n']) |> filter(w => w.length > 0) |> collect()
 
             for i in 0..words.count - 1 do
                 if words[i] =~ "--target" then
-                    return TEST_TARGETS.of(words[i + 1])
+                    return words[i + 1]
                 fi
             od
 

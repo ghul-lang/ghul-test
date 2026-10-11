@@ -855,6 +855,35 @@ fi
 echo integration-tests/project-tests-target: PASS
 
 
+echo integration-tests/build-targets-direct...
+
+# build_targets makes a variant of a project test built directly, and passes
+# over one for a target the run does not cover.
+TEST_PROCESSES=1 $RUNNER --config direct-build-targets integration-tests/dotnet-build | tee actual-output
+
+if [ "${PIPESTATUS[0]}" != "0" ] || ! grep -q "pass: integration-tests/dotnet-build/hello-world\[dotnet\]" actual-output ; then
+    echo integration-tests/build-targets-direct did not build the dotnet variant directly
+
+    exit 1
+fi
+
+echo integration-tests/build-targets-direct: PASS
+
+echo integration-tests/build-targets-ghul-cli...
+
+# Under ghul-cli, each project is built for the listed targets its manifest
+# lists too.
+TEST_PROCESSES=1 $RUNNER --config ghul-cli-build-targets integration-tests/project-tests | tee actual-output
+
+if [ "${PIPESTATUS[0]}" != "0" ] || ! grep -q "pass: integration-tests/project-tests/hello\[dotnet\]" actual-output ; then
+    echo integration-tests/build-targets-ghul-cli did not build the dotnet variant
+
+    exit 1
+fi
+
+echo integration-tests/build-targets-ghul-cli: PASS
+
+
 echo integration-tests/targets-file...
 
 # A test carrying a `targets` file runs once per target it names, in a
@@ -1003,6 +1032,22 @@ if ! grep -q "pass: ../targets-file/hello\[dotnet\]" actual-output ; then
     echo integration-tests/configurations: run targets did not keep the dotnet variant
     exit 1
 fi
+
+expect_configuration_pass "build targets, resolving per-target expectations" --config build-targets ../build-targets
+
+if ! grep -q "pass: ../build-targets/hello\[dotnet\]" actual-output || ! grep -q "1 tests passed over" actual-output ; then
+    echo integration-tests/configurations: build targets did not build the dotnet variant and pass the wasm one over
+    exit 1
+fi
+
+expect_configuration_pass "build targets, a targets file winning" --config build-targets ../targets-file
+
+if ! grep -q "its targets file wins over build_targets, so it is not built for wasm" actual-output ; then
+    echo integration-tests/configurations: build targets did not report the targets file winning
+    exit 1
+fi
+
+expect_configuration_problem "unknown build target" "build_targets names cobol" --config build-targets-unknown ../build-targets
 
 expect_configuration_problem "unknown run target" "run_targets names cobol" --config unknown-target tests
 

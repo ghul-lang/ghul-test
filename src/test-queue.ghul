@@ -42,6 +42,24 @@ namespace Tester is
         /// does not cover.
         passed_over_count: int
 
+        // Why variants were passed over other than for the run's targets.
+        _passed_over_reasons: MutableList[string]
+
+        // Tests whose `targets` file leaves out targets `build_targets` names,
+        // reported so a target not built is visible in the run.
+        _overridden: MutableList[string]
+
+        /// The targets each test is built for, one variant each, or null to
+        /// build each test once for the target it names.
+        build_targets: Collections.List[string]? public
+
+        /// For each target, the flags of each library that stands for a
+        /// package, keyed by the package in lower case.
+        package_flags: Collections.Map[string, Collections.MAP[string, string]] public,
+            = value is _package_flags = value si
+
+        _package_flags: Collections.Map[string, Collections.MAP[string, string]]
+
         _covers(target: TestTarget) -> bool =>
             if let targets = run_targets then targets |> any(t => t == target) else true fi
 
@@ -83,6 +101,9 @@ namespace Tester is
 
             _tests = LIST[TEST]()
             _undiscovered = LIST[string]()
+            _passed_over_reasons = LIST[string]()
+            _overridden = LIST[string]()
+            _package_flags = Collections.MAP[string, Collections.MAP[string, string]]()
         si
 
         run_queued_tests() is
@@ -90,6 +111,7 @@ namespace Tester is
 
             report_missing_disassembler()
             report_direct_builds()
+            report_passed_over()
 
             for test in _tests do
                 let runner =
@@ -195,7 +217,37 @@ namespace Tester is
 
             let flags = if File.exists(flags_path) then File.read_all_text(flags_path) else "" fi
 
-            if !TARGET_VARIANTS.has(path) /\ !_covers(project?.test_target ?? TEST.named_target(flags) ?? TestTarget.DOTNET) then
+            if TARGET_VARIANTS.has(path) \/ build_targets? then
+                let problem: string? mut = null
+
+                let targets = variant_targets(path, flags, problem ref)
+
+                if !targets? then
+                    _undiscovered.add("{path}: {problem}")
+                    return
+                fi
+
+                let variant_ordinal = _candidate_ordinal
+
+                _candidate_ordinal = _candidate_ordinal + 1
+
+                if _shard.matches(variant_ordinal) then
+                    queue_variants(path, flags, tags, targets)
+                fi
+
+                return
+            fi
+
+            // A test that was run as variants before and is not now: the
+            // copies would otherwise be read as its sources by a build that
+            // globs the test directory.
+            let stale_variants = Path.join(path, TARGET_VARIANTS.DIRECTORY)
+
+            if Directory.exists(stale_variants) then
+                Directory.delete(stale_variants, true)
+            fi
+
+            if !_covers(project?.test_target ?? TEST.named_target(flags) ?? TestTarget.DOTNET) then
                 passed_over_count = passed_over_count + 1
                 return
             fi
@@ -210,11 +262,6 @@ namespace Tester is
 
             let source_files = get_source_files(path)
             let is_build_failure_expected = File.exists("{path}/fail.expected")
-
-            if TARGET_VARIANTS.has(path) then
-                queue_variants(path, flags, tags)
-                return
-            fi
 
             let test =
                 TEST(
@@ -306,29 +353,63 @@ namespace Tester is
             _tests.add(test)
         si
 
-        // One test for each target a `targets` file names, each in its own
-        // directory with the expectations resolved for that target, and the
-        // target added to the flags. The tags are the one test's, and so is
-        // the shard ordinal, so a shard holds every variant or none.
-        queue_variants(path: string, flags: string, tags: Iterable[string]) is
-            if _compiler_under_test.is_dotnet_build \/ _compiler_under_test.is_ghul_cli then
-                _undiscovered.add("{path}: a {TARGET_VARIANTS.TARGETS} file is not supported in a msbuild, direct or ghul-cli build, where the build names the target")
-                return
+        // The targets the test at `path` is built for, one variant each: the
+        // ones its `targets` file names, or else the configuration's
+        // `build_targets`, narrowed to the one its flags name where they
+        // name one. Null, with the reason in `problem`, where the `targets`
+        // file cannot be used.
+        variant_targets(path: string, flags: string, problem: string? ref) -> Collections.List[string]? is
+            problem! = null
+
+            if TARGET_VARIANTS.has(path) then
+                let named = TARGET_VARIANTS.read(path, flags, problem)
+
+                if let wanted = build_targets /\ named? then
+                    let left_out = wanted |> filter(target => !(named |> any(n => n =~ target))) |> collect()
+
+                    if left_out.count > 0 then
+                        _overridden.add("{path}: its {TARGET_VARIANTS.TARGETS} file wins over build_targets, so it is not built for {string.join(", ", left_out)}")
+                    fi
+                fi
+
+                return named
             fi
 
-            let problem: string? mut = null
-
-            let targets = TARGET_VARIANTS.read(path, flags, problem ref)
-
-            if !targets? then
-                _undiscovered.add("{path}: {problem}")
-                return
+            if let named = TEST.named_target_name(flags) then
+                return [named]
             fi
 
+            return build_targets
+        si
+
+        // One test for each of `targets`, each in its own directory with the
+        // expectations resolved for that target. The tags are the one test's,
+        // and so is the shard ordinal, so a shard holds every variant or none.
+        queue_variants(path: string, flags: string, tags: Iterable[string], targets: Collections.List[string]) is
             for target in targets do
-                if !_covers(TEST_TARGETS.of(target) ?? TestTarget.DOTNET) then
+                let test_target = TEST_TARGETS.of(target) ?? TestTarget.DOTNET
+
+                if !_covers(test_target) then
                     passed_over_count = passed_over_count + 1
                     continue
+                fi
+
+                let project: PROJECT? mut = null
+
+                if _compiler_under_test.is_ghul_cli then
+                    let problem: string? mut = null
+
+                    project = PROJECT.read(path, target, problem ref)
+
+                    if let reason = problem then
+                        _undiscovered.add("{path}: {reason}")
+                        return
+                    fi
+
+                    if !project? then
+                        pass_over("the project does not list the target")
+                        continue
+                    fi
                 fi
 
                 let directory = TARGET_VARIANTS.materialize(path, target)
@@ -337,16 +418,93 @@ namespace Tester is
                     TEST(
                         directory,
                         get_source_files(directory),
-                        "{flags.trim()} --target {target}{extra_flags(target)}",
+                        variant_flags(flags, target),
                         File.exists("{directory}/fail.expected"),
                         tags
                     )
 
                 test.name = "{path}[{target}]"
+                test.build_target = test_target
+                test.project = project
+
+                if _compiler_under_test.is_dotnet_build then
+                    if test_target == TestTarget.DOTNET then
+                        if _compiler_under_test.build_directly /\ flags.trim().length == 0 then
+                            let problem: string? mut = null
+
+                            test.direct = DIRECT_BUILD.read(directory, _target_framework, problem ref)
+                            test.direct_problem = problem
+                        fi
+                    elif flags.trim().length > 0 then
+                        pass_over("ghulflags is not empty, so only MSBuild can build it")
+                        continue
+                    else
+                        let problem: string? mut = null
+
+                        let direct = DIRECT_BUILD.read(directory, _target_framework, target, known_packages(target), problem ref)
+
+                        if !direct? then
+                            pass_over(problem ?? "it cannot be built directly")
+                            continue
+                        fi
+
+                        direct.target_options.add_range(["--target", target])
+                        direct.target_options.add_range(_words(extra_flags(target)))
+
+                        for package in direct.packages do
+                            direct.target_options.add_range(_words(_package_flags[target][package]))
+                        od
+
+                        test.direct = direct
+                    fi
+                fi
 
                 queue_test(test)
             od
         si
+
+        // The flags a variant is built with. A compiler build is told the
+        // target and given the configuration's flags for it; a project build
+        // takes the target from the project, from the build kind, or from
+        // what the runner hands a direct build.
+        variant_flags(flags: string, target: string) -> string =>
+            if _compiler_under_test.is_dotnet_build \/ _compiler_under_test.is_ghul_cli then
+                flags
+            elif TEST.named_target(flags)? then
+                "{flags.trim()}{extra_flags(target)}"
+            else
+                "{flags.trim()} --target {target}{extra_flags(target)}"
+            fi
+
+        // The packages, in lower case, a library stands for under `target`.
+        known_packages(target: string) -> Collections.Set[string] =>
+            if _package_flags.contains_key(target) then
+                _package_flags[target].keys |> collect_set()
+            else
+                Collections.SET[string]()
+            fi
+
+        // A variant that cannot be built for its target in this run: counted
+        // with the others passed over, and its reason reported once.
+        pass_over(reason: string) is
+            passed_over_count = passed_over_count + 1
+            _passed_over_reasons.add(reason)
+        si
+
+        // Why variants were passed over for a reason other than the run's
+        // targets, once each with how many.
+        report_passed_over() is
+            for line in _overridden do
+                Std.write_line(line)
+            od
+
+            for reason in _passed_over_reasons |> Ghul.Pipes.distinct() do
+                Std.write_line("passed over {_passed_over_reasons |> Ghul.Pipes.count(r => r =~ reason)} variant(s): {reason}")
+            od
+        si
+
+        _words(text: string) -> Iterable[string] =>
+            text.split([' ', '\t', '\r', '\n']) |> filter(word => word.length > 0) |> collect()
 
         get_source_files(path: string) -> Iterable[string] =>
             Directory.get_files(path, "*.ghul")

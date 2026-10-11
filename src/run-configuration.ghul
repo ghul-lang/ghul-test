@@ -63,10 +63,20 @@ namespace Tester is
         /// variant of one, built for any other is passed over.
         run_targets: LIST[TestTarget]?
 
+        /// The targets each test is built for, one run per target, or null
+        /// to build each test once, for the target it names.
+        build_targets: LIST[string]?
+
+        /// For each target, the flags each library that stands for a package
+        /// adds, keyed by the package: given only to a project that
+        /// references it.
+        package_flags: MAP[string, MAP[string, string]]
+
         init(name: string) is
             self.name = name
             build = "compiler"
             target_flags = MAP[string, string]()
+            package_flags = MAP[string, MAP[string, string]]()
         si
 
         /// The file at or above `from`, or null where there is none.
@@ -168,7 +178,7 @@ namespace Tester is
             fi
 
             if let ildasm = string_property(entry, "ildasm") then
-                self.ildasm = Path.get_full_path(Path.join(base, ildasm))
+                self.ildasm = Path.get_full_path(Path.combine(base, ildasm))
             fi
 
             if let ghul = string_property(entry, "ghul") then
@@ -201,6 +211,36 @@ namespace Tester is
                 self.run_targets = covered
             fi
 
+            let build_targets: JsonElement mut
+
+            if entry.try_get_property("build_targets", build_targets ref) then
+                if build_targets.value_kind != JsonValueKind.ARRAY then
+                    throw Exception("{file}: {name}: build_targets must be an array of target names")
+                fi
+
+                let built = LIST[string]()
+
+                for element in build_targets.enumerate_array() do
+                    let target_name = if element.value_kind == JsonValueKind.STRING then element.get_string() ?? "" else "" fi
+
+                    if !TEST_TARGETS.of(target_name)? then
+                        throw Exception("{file}: {name}: build_targets names {target_name}, which is not a target ghul-test can run")
+                    fi
+
+                    if built.contains(target_name) then
+                        throw Exception("{file}: {name}: build_targets names {target_name} twice")
+                    fi
+
+                    built.add(target_name)
+                od
+
+                if built.count == 0 then
+                    throw Exception("{file}: {name}: build_targets names no target")
+                fi
+
+                self.build_targets = built
+            fi
+
             let targets: JsonElement mut
 
             if entry.try_get_property("targets", targets ref) then
@@ -214,6 +254,7 @@ namespace Tester is
                     fi
 
                     target_flags[target.name] = TARGET_LIBRARIES.flags(target.value, base, "{file}: {name}: {target.name}")
+                    package_flags[target.name] = TARGET_LIBRARIES.package_flags(target.value, base, "{file}: {name}: {target.name}")
                 od
             fi
         si
@@ -240,9 +281,9 @@ namespace Tester is
             fi
 
             if let publish = string_property(compiler, "publish") then
-                publish_directory = Path.get_full_path(Path.join(base, publish))
+                publish_directory = Path.get_full_path(Path.combine(base, publish))
             elif let path = string_property(compiler, "path") then
-                let full = Path.get_full_path(Path.join(base, path))
+                let full = Path.get_full_path(Path.combine(base, path))
 
                 publish_directory = Path.get_directory_name(full)
                 compiler_command = if full.ends_with(".dll") then "dotnet {full}" else full fi
@@ -269,7 +310,7 @@ namespace Tester is
             fi
 
             if let path = string_property(runtime, "path") then
-                runtime_path = Path.get_full_path(Path.join(base, path))
+                runtime_path = Path.get_full_path(Path.combine(base, path))
             elif let package = string_property(runtime, "package") then
                 runtime_path = RUNTIME_PACKAGE.path(package, runtime, base, "{file}: {name}")
             else
@@ -301,8 +342,12 @@ namespace Tester is
                 fi
             fi
 
-            if build !~ "compiler" /\ target_flags.count > 0 then
-                throw Exception("{file}: {name}: targets apply to a compiler build, where the runner names the target")
+            if build =~ "ghul-cli" /\ target_flags.count > 0 then
+                throw Exception("{file}: {name}: targets do not apply to a ghul-cli build, where each project's manifest names its libraries")
+            fi
+
+            if build =~ "ghul-cli" /\ build_targets? /\ ghul_target? then
+                throw Exception("{file}: {name}: a ghul-cli build names ghul_target or build_targets, not both")
             fi
         si
 
@@ -369,7 +414,9 @@ namespace Tester is
                 let lines = LIST[string]()
 
                 for library in libraries.enumerate_array() do
-                    lines.add_range(_library_lines(library, base, context))
+                    if !_package(library, context)? then
+                        lines.add_range(_library_lines(library, base, context))
+                    fi
                 od
 
                 if lines.count > 0 then
@@ -382,6 +429,61 @@ namespace Tester is
             fi
 
             return string.join(" ", result)
+        si
+
+        /// The flags each library in `entry` that names a `package` adds,
+        /// keyed by the package: a project build hands them to the compiler
+        /// only for a project that references the package.
+        ///
+        /// - entry: the target's entry in the configuration
+        /// - base: the directory relative paths are taken from
+        /// - context: what to name in a diagnostic
+        package_flags(entry: JsonElement, base: string, context: string) -> MAP[string, string] static is
+            let result = MAP[string, string]()
+
+            let libraries: JsonElement mut
+
+            if entry.value_kind != JsonValueKind.OBJECT \/ !entry.try_get_property("libraries", libraries ref) \/ libraries.value_kind != JsonValueKind.ARRAY then
+                return result
+            fi
+
+            for library in libraries.enumerate_array() do
+                if let package = _package(library, context) then
+                    let key = package.to_lower_invariant()
+
+                    if result.contains_key(key) then
+                        throw Exception("{context}: two libraries stand for package {package}")
+                    fi
+
+                    let response = Path.get_temp_file_name()
+
+                    File.write_all_lines(response, _library_lines(library, base, context))
+
+                    result[key] = "@{response}"
+                fi
+            od
+
+            return result
+        si
+
+        // The package a library stands for, or null where it is given to
+        // every run under its target.
+        _package(library: JsonElement, context: string) -> string? static is
+            if library.value_kind != JsonValueKind.OBJECT then
+                return null
+            fi
+
+            let value: JsonElement mut
+
+            if !library.try_get_property("package", value ref) then
+                return null
+            fi
+
+            if value.value_kind != JsonValueKind.STRING then
+                throw Exception("{context}: a library's package must be a string")
+            fi
+
+            return value.get_string()
         si
 
         // `--library-source`, the library's name, version and root, then
@@ -463,7 +565,7 @@ namespace Tester is
             fi
 
             for candidate in candidates do
-                let full = Path.get_full_path(Path.join(base, candidate))
+                let full = Path.get_full_path(Path.combine(base, candidate))
 
                 if Directory.exists(full) then
                     return full
@@ -536,7 +638,7 @@ namespace Tester is
 
             if !version? then
                 if let pinned_in = RUN_CONFIGURATION.string_property(entry, "pinned_in") then
-                    version = pinned_version(package, Path.get_full_path(Path.join(base, pinned_in)), context)
+                    version = pinned_version(package, Path.get_full_path(Path.combine(base, pinned_in)), context)
                 else
                     throw Exception("{context}: runtime package {package} names neither version nor pinned_in")
                 fi
