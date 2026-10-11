@@ -44,6 +44,14 @@ namespace Tester is
         // which target.
         project: PROJECT? public
 
+        // Set for a project test built with the compiler alone rather than
+        // with MSBuild: the command and options to build it with.
+        direct: DIRECT_BUILD? public
+
+        // Why a project test asked to be built directly is built with
+        // MSBuild instead, or null.
+        direct_problem: string? public
+
         result: Result? public
 
         to_string() -> string is

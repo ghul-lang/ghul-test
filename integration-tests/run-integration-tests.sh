@@ -129,6 +129,46 @@ fi
 echo integration-tests/dotnet-build: PASS
 
 
+echo integration-tests/dotnet-build-direct...
+
+# The same project, built with the compiler alone: the run above restored the
+# runtime it references, so it qualifies.
+TEST_PROCESSES=1 CI=1 $RUNNER --use-dotnet-build --direct --compiler "dotnet ghul-compiler" integration-tests/dotnet-build | tee actual-output
+
+if [ "${PIPESTATUS[0]}" != "0" ]; then
+    echo integration-tests/dotnet-build-direct unexpectedly failed
+
+    exit 1
+fi
+
+if ! diff integration-tests/dotnet-build/expected-direct-output actual-output ; then
+    echo integration-tests/dotnet-build-direct output did not match expected output
+
+    exit 1
+fi
+
+echo integration-tests/dotnet-build-direct: PASS
+
+
+echo integration-tests/direct-needs-dotnet-build...
+
+TEST_PROCESSES=1 CI=1 $RUNNER --direct integration-tests/execution-pass | tee actual-output
+
+if [ "${PIPESTATUS[0]}" != "1" ]; then
+    echo integration-tests/direct-needs-dotnet-build did not exit 1
+
+    exit 1
+fi
+
+if ! grep -q -- "--direct can only be given with --use-dotnet-build" actual-output ; then
+    echo integration-tests/direct-needs-dotnet-build did not say why
+
+    exit 1
+fi
+
+echo integration-tests/direct-needs-dotnet-build: PASS
+
+
 echo integration-tests/compiler-override-honoured...
 
 # The chosen compiler has to reach the build itself, not just be reported: a

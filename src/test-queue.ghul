@@ -77,6 +77,7 @@ namespace Tester is
             _progress_reporter.on_discovered(count)
 
             report_missing_disassembler()
+            report_direct_builds()
 
             for test in _tests do
                 let runner =
@@ -201,12 +202,54 @@ namespace Tester is
 
             test.project = project
 
+            if _compiler_under_test.build_directly /\ flags.trim().length == 0 then
+                let problem: string? mut = null
+
+                test.direct = DIRECT_BUILD.read(path, _target_framework, problem ref)
+                test.direct_problem = problem
+            fi
+
             queue_test(test)
         si
 
         looks_like_test(path: string) -> bool =>
             File.exists("{path}/test.ghul") \/
             Directory.get_files(path, "*.expected").count > 0
+
+        // How many of the run's tests are built without MSBuild, where the
+        // run asked for that: the rest are built with `dotnet build`.
+        report_direct_builds() is
+            if !_compiler_under_test.build_directly then
+                return
+            fi
+
+            let direct = _tests |> filter(test => test.direct?) |> Ghul.Pipes.count()
+
+            Std.write_line("building {direct} of {_tests.count} test(s) directly, the rest with dotnet build")
+
+            let reasons =
+                _tests
+                    |> filter(test => test.direct_problem?)
+                    |> map(test => test.direct_problem!)
+                    |> collect_list()
+
+            for reason in reasons |> Ghul.Pipes.distinct() do
+                Std.write_line("  with dotnet build: {reasons |> Ghul.Pipes.count(r => r =~ reason)} for {reason}")
+            od
+        si
+
+        _target_framework: string =>
+            _known_target_framework ?? _remember_target_framework()
+
+        _known_target_framework: string?
+
+        _remember_target_framework() -> string is
+            let result = _compiler_under_test.target_framework
+
+            _known_target_framework = result
+
+            return result
+        si
 
         // Asked once for the whole run rather than per test: whether a
         // disassembler was found cannot change while tests are running,
