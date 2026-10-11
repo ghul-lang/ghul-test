@@ -22,6 +22,14 @@ namespace Tester is
         /// The directory under a test holding one directory per target.
         DIRECTORY: string static => ".targets"
 
+        /// The directory beside the test at `path` that its `target` variant
+        /// runs in when the variant is placed beside the test.
+        beside_directory(path: string, target: string) -> string static is
+            let full = Path.get_full_path(path).trim_end(Path.directory_separator_char)
+
+            return Path.join([Path.get_directory_name(full) ?? full, "{DIRECTORY}-{Path.get_file_name(full)}-{target}"])
+        si
+
         /// Whether the test at `path` carries a `targets` file.
         has(path: string) -> bool static => File.exists(Path.join(path, TARGETS))
 
@@ -62,8 +70,19 @@ namespace Tester is
         /// Builds the directory the `target` variant of the test at `path`
         /// runs in, and returns its path. An earlier run's directory is
         /// replaced, so nothing it left behind is read as this run's.
-        materialize(path: string, target: string) -> string static is
-            let directory = Path.join([path, DIRECTORY, target])
+        materialize(path: string, target: string) -> string static =>
+            materialize(path, target, false)
+
+        /// Builds the variant directory as above. With `beside` the directory
+        /// sits next to the test, as `.targets-<test>-<target>`, rather than
+        /// inside it, so it is as deep as the test is and a path a project
+        /// names relative to the test directory reaches the same place.
+        ///
+        /// - path: the test directory
+        /// - target: the target the variant is built for
+        /// - beside: whether to place the variant beside the test
+        materialize(path: string, target: string, beside: bool) -> string static is
+            let directory = if beside then beside_directory(path, target) else Path.join([path, DIRECTORY, target]) fi
 
             if Directory.exists(directory) then
                 Directory.delete(directory, true)
