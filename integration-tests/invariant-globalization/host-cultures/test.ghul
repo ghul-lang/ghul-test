@@ -1,0 +1,3 @@
+use IO.Std.write_line
+
+write_line(System.Environment.get_environment_variable("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT") ?? "unset")

@@ -368,6 +368,15 @@ namespace Tester is
 
         IGNORE_SPACE: string static => "ignore-space"
 
+        // Every compiler and program a test runs uses .NET's invariant
+        // globalization, as the wasm and llvm targets behave, so output and
+        // diagnostics never depend on the host's culture. A test that
+        // exercises cultures on purpose carries a `cultures` file and runs
+        // with the host's.
+        uses_invariant_globalization: bool => !File.exists(get_path(CULTURES))
+
+        CULTURES: string static => "cultures"
+
         RUN_EXIT_EXPECTED: string static => "run.exit.expected"
 
         input_file() -> string? =>
@@ -1288,6 +1297,10 @@ namespace Tester is
                 for element in environment do
                     start_info.environment.add(element.key, element.value)
                 od
+            fi
+
+            if uses_invariant_globalization then
+                start_info.environment["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1"
             fi
 
             // One argument at a time rather than a joined string, so an
