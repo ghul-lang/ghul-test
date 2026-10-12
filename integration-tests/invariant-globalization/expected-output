@@ -1,0 +1,7 @@
+using 1 processes to run tests
+ 0% ✅ pass: integration-tests/invariant-globalization/host-cultures
+50% ✅ pass: integration-tests/invariant-globalization/invariant
+2 tests discovered
+2 tests enabled
+2/2 tests passed
+✅ all tests passed ✅

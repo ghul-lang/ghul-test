@@ -459,6 +459,28 @@ fi
 echo integration-tests/run-args: PASS
 
 
+echo integration-tests/invariant-globalization...
+
+# Every process a test runs gets DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1,
+# unless the test carries a cultures file. Each case prints what its program
+# was given.
+TEST_PROCESSES=1 $RUNNER integration-tests/invariant-globalization | tee actual-output
+
+if [ "${PIPESTATUS[0]}" != "0" ]; then
+    echo integration-tests/invariant-globalization unexpectedly failed
+
+    exit 1
+fi
+
+if ! diff integration-tests/invariant-globalization/expected-output actual-output ; then
+    echo integration-tests/invariant-globalization output did not match expected output
+
+    exit 1
+fi
+
+echo integration-tests/invariant-globalization: PASS
+
+
 echo integration-tests/run-stderr...
 
 # A test carrying run.err.expected asserts what the program wrote to its
