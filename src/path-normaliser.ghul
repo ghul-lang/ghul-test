@@ -6,6 +6,34 @@ namespace Tester is
     // Makes the paths a test's output holds independent of where the
     // repository is checked out, so a snapshot holds on every machine.
     class PATH_NORMALISER is
+        // Each library's root, as a full path, to its name. Concurrent, so a
+        // library can be recorded while tests run and read the record.
+        _libraries: System.Collections.Concurrent.ConcurrentDictionary[string, string] static
+
+        init() static is
+            _libraries = System.Collections.Concurrent.ConcurrentDictionary[string, string]()
+        si
+
+        /// Records that the library `name` was resolved to `root` for this run,
+        /// so a path under it is written the same wherever its checkout is.
+        ///
+        /// - name: the library's name in the configuration
+        /// - root: the directory it resolved to
+        add_library(name: string, root: string) static is
+            _libraries.try_add(Path.get_full_path(root), name)
+        si
+
+        // The libraries recorded so far, as a copy no later record changes.
+        _recorded: Collections.List[(name: string, root: string)] static is
+            let result = Collections.LIST[(name: string, root: string)]()
+
+            for entry in _libraries.to_array() do
+                result.add((entry.value, entry.key))
+            od
+
+            return result
+        si
+
         // `content` with the test directory removed from the paths in it,
         // and the paths elsewhere in the checkout written relative to the
         // test directory: a library source next to the tests reads as
@@ -14,8 +42,35 @@ namespace Tester is
         // - test_directory: the test's directory, as a full path
         // - checkout_root: the repository's root directory as a full path,
         //   or null where the test is not in a repository
-        normalise(content: string, test_directory: string, checkout_root: string?) -> string static is
-            let result mut = content.replace(_with_separator(test_directory), "")
+        normalise(content: string, test_directory: string, checkout_root: string?) -> string static =>
+            normalise(content, test_directory, checkout_root, _recorded)
+
+        // The same, with a path under one of `libraries` written as the
+        // library's name in angle brackets and the path within it, such as
+        // `<ghul-core>/src/tasks.ghul`: a library resolves to a different
+        // checkout in CI and in a workspace, so neither place appears.
+        normalise(
+            content: string,
+            test_directory: string,
+            checkout_root: string?,
+            libraries: Collections.Iterable[(name: string, root: string)]
+        ) -> string static is
+            let result mut = content
+
+            // A longer root first, so a library inside another's root is
+            // written as itself. A library holding the test itself, as when
+            // its own repository runs its tests, is left to the rules below.
+            let ordered = Collections.LIST[(name: string, root: string)](libraries)
+
+            ordered.sort((a: (name: string, root: string), b: (name: string, root: string)) -> int => b.root.length - a.root.length)
+
+            for (name, root) in ordered do
+                if !_with_separator(test_directory).starts_with(_with_separator(root)) then
+                    result = result.replace(_with_separator(root), "<{name}>/")
+                fi
+            od
+
+            result = result.replace(_with_separator(test_directory), "")
 
             if let root = checkout_root then
                 let relative = Path.get_relative_path(test_directory, root).replace('\\', '/')
