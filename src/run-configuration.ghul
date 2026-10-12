@@ -501,6 +501,8 @@ namespace Tester is
             fi
 
             let root = _root(library, base, "{context}: {name}")
+
+            PATH_NORMALISER.add_library(name, root)
             let version_file = Path.join(root, "VERSION")
 
             if !File.exists(version_file) then

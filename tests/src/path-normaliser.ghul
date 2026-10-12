@@ -34,6 +34,33 @@ namespace Tests is
         si
 
         @Test()
+        PATH_NORMALISER__normalise__given_a_library_outside_the_checkout__writes_its_name() is
+            let content = "/work/ghul-core/src/tasks.ghul: 18,11..18,15: error: symbol TASK is redefined"
+            let libraries = Collections.LIST[(name: string, root: string)]([("ghul-core", "/work/ghul-core")])
+
+            should(PATH_NORMALISER.normalise(content, "/work/repo/tests/maybe", "/work/repo", libraries))
+                .be("<ghul-core>/src/tasks.ghul: 18,11..18,15: error: symbol TASK is redefined", "", [])
+        si
+
+        @Test()
+        PATH_NORMALISER__normalise__given_a_library_inside_the_checkout__writes_its_name() is
+            let content = "/work/repo/libraries/ghul-core/src/tasks.ghul: 18,11..18,15: error: something"
+            let libraries = Collections.LIST[(name: string, root: string)]([("ghul-core", "/work/repo/libraries/ghul-core")])
+
+            should(PATH_NORMALISER.normalise(content, "/work/repo/tests/maybe", "/work/repo", libraries))
+                .be("<ghul-core>/src/tasks.ghul: 18,11..18,15: error: something", "", [])
+        si
+
+        @Test()
+        PATH_NORMALISER__normalise__given_a_library_holding_the_test__leaves_its_paths_to_the_checkout() is
+            let content = "/work/repo/src/list.ghul(3,1): error : something"
+            let libraries = Collections.LIST[(name: string, root: string)]([("ghul-core", "/work/repo")])
+
+            should(PATH_NORMALISER.normalise(content, "/work/repo/tests/maybe", "/work/repo", libraries))
+                .be("../../src/list.ghul(3,1): error : something", "", [])
+        si
+
+        @Test()
         PATH_NORMALISER__normalise__given_a_path_outside_the_checkout__leaves_it_alone() is
             let content = "/usr/share/dotnet/sdk/Sdk.targets(10,5): error : something"
 
