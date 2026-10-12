@@ -6,7 +6,13 @@ namespace Tester is
     // Makes the paths a test's output holds independent of where the
     // repository is checked out, so a snapshot holds on every machine.
     class PATH_NORMALISER is
-        _libraries: Collections.LIST[(name: string, root: string)]? static
+        // Each library's root, as a full path, to its name. Concurrent, so a
+        // library can be recorded while tests run and read the record.
+        _libraries: System.Collections.Concurrent.ConcurrentDictionary[string, string] static
+
+        init() static is
+            _libraries = System.Collections.Concurrent.ConcurrentDictionary[string, string]()
+        si
 
         /// Records that the library `name` was resolved to `root` for this run,
         /// so a path under it is written the same wherever its checkout is.
@@ -14,19 +20,18 @@ namespace Tester is
         /// - name: the library's name in the configuration
         /// - root: the directory it resolved to
         add_library(name: string, root: string) static is
-            let libraries = _libraries ?? Collections.LIST[(name: string, root: string)]()
+            _libraries.try_add(Path.get_full_path(root), name)
+        si
 
-            _libraries = libraries
+        // The libraries recorded so far, as a copy no later record changes.
+        _recorded: Collections.List[(name: string, root: string)] static is
+            let result = Collections.LIST[(name: string, root: string)]()
 
-            let full = Path.get_full_path(root)
-
-            for (_, existing) in libraries do
-                if existing =~ full then
-                    return
-                fi
+            for entry in _libraries.to_array() do
+                result.add((entry.value, entry.key))
             od
 
-            libraries.add((name, full))
+            return result
         si
 
         // `content` with the test directory removed from the paths in it,
@@ -38,7 +43,7 @@ namespace Tester is
         // - checkout_root: the repository's root directory as a full path,
         //   or null where the test is not in a repository
         normalise(content: string, test_directory: string, checkout_root: string?) -> string static =>
-            normalise(content, test_directory, checkout_root, _libraries ?? Collections.LIST[(name: string, root: string)]())
+            normalise(content, test_directory, checkout_root, _recorded)
 
         // The same, with a path under one of `libraries` written as the
         // library's name in angle brackets and the path within it, such as
