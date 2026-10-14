@@ -14,6 +14,7 @@ namespace Tester is
     class TEST_QUEUE(
         host_cli: string private,
         target_cli: string private,
+        wasm_host_cli: string? private,
         compiler_under_test: COMPILER_UNDER_TEST private,
         disassembler: DISASSEMBLER private,
         progress_reporter: PROGRESS_REPORTER private,
@@ -118,6 +119,7 @@ namespace Tester is
                     RUNNER(
                         _host_cli,
                         _target_cli,
+                        _wasm_host_cli,
                         _compiler_under_test,
                         _disassembler,
                         test

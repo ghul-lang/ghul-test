@@ -49,6 +49,11 @@ namespace Tester is
         /// The disassembler, or null to use the one ghul-test carries.
         ildasm: string?
 
+        /// The program that runs a test built for the wasm target, in place of
+        /// Node through the loader the compiler writes: given the module's path
+        /// and the program arguments. Null for Node.
+        wasm_host: string?
+
         /// The command that runs ghul-cli, for a `ghul-cli` build.
         ghul_command: string?
 
@@ -179,6 +184,10 @@ namespace Tester is
 
             if let ildasm = string_property(entry, "ildasm") then
                 self.ildasm = Path.get_full_path(Path.combine(base, ildasm))
+            fi
+
+            if let host = string_property(entry, "wasm_host") then
+                wasm_host = Path.get_full_path(Path.combine(base, host))
             fi
 
             if let ghul = string_property(entry, "ghul") then

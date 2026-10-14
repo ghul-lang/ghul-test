@@ -141,7 +141,7 @@ namespace Tester is
             result.project_path = Path.get_full_path(projects[0])
             result.output_name =
                 if target? then
-                    "binary.exe"
+                    if target == "wasm" then "binary.wasm" else "binary.exe" fi
                 else
                     "{result.assembly_name ?? Path.get_file_name_without_extension(projects[0])}.dll"
                 fi

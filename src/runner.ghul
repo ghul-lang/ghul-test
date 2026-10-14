@@ -28,6 +28,7 @@ namespace Tester is
     class RUNNER(
         host_cli: string private,
         target_cli: string private,
+        wasm_host_cli: string? private,
         compiler_under_test: COMPILER_UNDER_TEST private,
         disassembler: DISASSEMBLER private,
         test: TEST private
@@ -405,15 +406,15 @@ namespace Tester is
             arguments
         si
 
-        // The program a test's binary is run with: the .NET host, Node for
-        // a test built for the wasm target, or the binary itself for a
-        // native one. `binary` is relative to the test directory, and a
-        // native program is named by its full path, since a relative one
-        // would be looked up on the PATH or against ghul-test's own
-        // directory rather than the test's.
+        // The program a test's binary is run with: the .NET host, a
+        // configuration's wasm host or Node for a test built for the wasm
+        // target, or the binary itself for a native one. `binary` is
+        // relative to the test directory, and a native program is named by
+        // its full path, since a relative one would be looked up on the PATH
+        // or against ghul-test's own directory rather than the test's.
         program_cli(binary: string) -> string =>
             case _target
-            when TestTarget.WASM then "node"
+            when TestTarget.WASM then _wasm_host_cli ?? "node"
             when TestTarget.LLVM then Path.get_full_path(get_path(binary))
             else _target_cli
             esac
@@ -421,13 +422,23 @@ namespace Tester is
         // The command line for a run: the binary, then whatever `run.args`
         // holds. A wasm test's program is started through the loader the
         // compiler wrote beside its module, which has the module's name and
-        // the extension `.mjs`. A native program is the program run, so
-        // only the arguments follow it.
+        // the extension `.mjs` — or, where the configuration names a wasm
+        // host, the module itself is handed to that host. A native program
+        // is the program run, so only the arguments follow it.
         run_command_line(binary: string) -> Collections.List[string] is
             let command_line = Collections.LIST[string]()
 
             if _target == TestTarget.WASM then
-                command_line.add(Path.change_extension(binary, ".mjs") ?? binary)
+                if let host = _wasm_host_cli then
+                    // A direct build of a target names its module itself, so
+                    // the host is handed that; anything else follows the
+                    // loader's spelling.
+                    let module = direct?.output_name ?? (Path.change_extension(binary, ".wasm") ?? binary)
+
+                    command_line.add(module)
+                else
+                    command_line.add(Path.change_extension(binary, ".mjs") ?? binary)
+                fi
             elif _target == TestTarget.DOTNET then
                 command_line.add(binary)
             fi
@@ -638,6 +649,7 @@ namespace Tester is
                 delete_files([
                     "binary.exe",
                     "binary.mjs",
+                    "binary.wasm",
                     "binary.exe.mdb",
                     "binary.runtimeconfig.json",
                     "compiler.out",
@@ -721,7 +733,7 @@ namespace Tester is
                     )
             catch e: System.ComponentModel.Win32Exception
                 if _target == TestTarget.WASM then
-                    add_fail("could not start node, which runs a test built for the wasm target: {e.message}")
+                    add_fail("could not start the program that runs a test built for the wasm target: {e.message}")
                     return false
                 elif _target == TestTarget.LLVM then
                     add_fail("could not start the native program the test built: {e.message}")
