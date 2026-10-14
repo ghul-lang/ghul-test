@@ -224,6 +224,7 @@ namespace Tester is
                 TEST_QUEUE(
                     host,
                     target,
+                    configuration.wasm_host,
                     compiler_under_test,
                     disassembler,
                     PROGRESS_REPORTER(requested.paths),
