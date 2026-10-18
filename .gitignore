@@ -35,3 +35,4 @@ publish/
 # per-target runs of a test: inside it for a compiler build, beside it for a project build
 .targets/
 .targets-*/
+integration-tests/**/out/
