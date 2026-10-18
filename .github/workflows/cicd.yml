@@ -77,6 +77,11 @@ jobs:
     steps:
     - uses: actions/checkout@v7
 
+    # A ghul-cli project test builds for wasm, and its module runs under Node.
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+
     - name: Restore local .NET tools
       run: dotnet tool restore
 
