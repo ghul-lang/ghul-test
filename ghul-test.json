@@ -43,12 +43,12 @@
         },
         "ghul-cli-build-targets": {
             "extends": "ghul-cli",
-            "build_targets": ["dotnet", "wasm"],
-            "run_targets": ["dotnet"]
+            "build_targets": ["wasm"],
+            "run_targets": ["wasm"]
         },
-        "ghul-cli-wasm": {
+        "ghul-cli-llvm": {
             "extends": "ghul-cli",
-            "ghul_target": "wasm"
+            "ghul_target": "llvm"
         }
     }
 }

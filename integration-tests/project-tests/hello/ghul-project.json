@@ -1,5 +1,5 @@
 {
     // a comment and a trailing comma, both of which ghul-cli accepts
     "name": "hello",
-    "targets": ["dotnet"],
+    "targets": ["wasm"],
 }
