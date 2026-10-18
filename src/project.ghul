@@ -68,9 +68,9 @@ namespace Tester is
                 od
             fi
 
-            // ghul-cli builds a manifest that lists no targets for dotnet.
+            // ghul-cli builds a manifest that lists no targets for wasm.
             if targets.count == 0 then
-                targets.add("dotnet")
+                targets.add("wasm")
             fi
 
             let target mut = targets[0]

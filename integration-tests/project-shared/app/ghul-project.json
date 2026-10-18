@@ -1,5 +1,5 @@
 {
     "name": "app",
-    "targets": ["dotnet"],
+    "targets": ["wasm"],
     "sources": ["src/**/*.ghul", "../shared/*.ghul"]
 }

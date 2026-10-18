@@ -881,7 +881,7 @@ echo integration-tests/project-tests-target...
 
 # --target picks which of a manifest's targets a project test is built for,
 # and a project that does not list it is not a test of that target.
-TEST_PROCESSES=1 $RUNNER --config ghul-cli-wasm integration-tests/project-tests | tee actual-output
+TEST_PROCESSES=1 $RUNNER --config ghul-cli-llvm integration-tests/project-tests | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
     echo integration-tests/project-tests-target unexpectedly failed
@@ -918,8 +918,8 @@ echo integration-tests/build-targets-ghul-cli...
 # lists too.
 TEST_PROCESSES=1 $RUNNER --config ghul-cli-build-targets integration-tests/project-tests | tee actual-output
 
-if [ "${PIPESTATUS[0]}" != "0" ] || ! grep -q "pass: integration-tests/project-tests/hello\[dotnet\]" actual-output ; then
-    echo integration-tests/build-targets-ghul-cli did not build the dotnet variant
+if [ "${PIPESTATUS[0]}" != "0" ] || ! grep -q "pass: integration-tests/project-tests/hello\[wasm\]" actual-output ; then
+    echo integration-tests/build-targets-ghul-cli did not build the wasm variant
 
     exit 1
 fi
@@ -933,7 +933,7 @@ echo integration-tests/project-shared...
 # path the manifest gives relative to the project still reaches the file.
 TEST_PROCESSES=1 $RUNNER --config ghul-cli-build-targets integration-tests/project-shared/app | tee actual-output
 
-if [ "${PIPESTATUS[0]}" != "0" ] || ! grep -q "pass: integration-tests/project-shared/app\[dotnet\]" actual-output ; then
+if [ "${PIPESTATUS[0]}" != "0" ] || ! grep -q "pass: integration-tests/project-shared/app\[wasm\]" actual-output ; then
     echo integration-tests/project-shared did not build the variant against its relative source
 
     exit 1

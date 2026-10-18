@@ -1,0 +1,49 @@
+namespace Tests is
+    use IO.Directory
+    use IO.File
+    use IO.Path
+
+    use Tester
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute
+
+    @TestClass()
+    class PROJECT_Should is
+
+        init() is si
+
+        // The project a test directory holding `manifest` reads as, asking
+        // for `wanted` where it is not null.
+        read(manifest: string, wanted: string?) -> PROJECT? is
+            let directory = Path.join([Path.get_temp_path(), "ghul-test-project-{System.Guid.new_guid().to_string("N")}"])
+
+            Directory.create_directory(directory)
+
+            try
+                File.write_all_text(Path.join([directory, PROJECT.MANIFEST]), manifest)
+
+                let problem: string? mut = null
+
+                return PROJECT.read(directory, wanted, problem ref)
+            finally
+                Directory.delete(directory, true)
+            yrt
+        si
+
+        @Test()
+        PROJECT__read__given_no_targets__builds_for_wasm() is
+            let project = read("{{ \"name\": \"app\" }}", null)
+
+            should(project?).be_true("", [])
+            should(project!.target =~ "wasm").be_true(project.target, [])
+        si
+
+        @Test()
+        PROJECT__read__given_targets__builds_for_the_first() is
+            let project = read("{{ \"name\": \"app\", \"targets\": [\"llvm\", \"wasm\"] }}", null)
+
+            should(project!.target =~ "llvm").be_true(project.target, [])
+        si
+    si
+si
