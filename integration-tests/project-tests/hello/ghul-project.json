@@ -2,4 +2,8 @@
     // a comment and a trailing comma, both of which ghul-cli accepts
     "name": "hello",
     "targets": ["wasm"],
+    "dependencies": {
+        "ghul-core": { "version": ">=0.0.0" },
+        "ghul-runtime": { "version": ">=0.0.0" },
+    },
 }
