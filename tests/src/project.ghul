@@ -45,5 +45,11 @@ namespace Tests is
 
             should(project!.target =~ "llvm").be_true(project.target, [])
         si
+
+        @Test()
+        PROJECT__read__given_a_collection_or_workspace__is_not_a_test() is
+            should(read("{{ \"kind\": \"collection\" }}", null)?).be_false("", [])
+            should(read("{{ \"kind\": \"workspace\", \"members\": [\"a\"] }}", null)?).be_false("", [])
+        si
     si
 si

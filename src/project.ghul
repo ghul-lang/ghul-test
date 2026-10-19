@@ -50,6 +50,16 @@ namespace Tester is
             fi
 
             let root = document.root_element
+
+            // A workspace or a collection owns no program: the projects under
+            // it are the tests, and the directory itself is neither a test nor
+            // a problem.
+            let container = _string(root, "kind")
+
+            if container? /\ (container =~ "workspace" \/ container =~ "collection") then
+                return null
+            fi
+
             let name = _string(root, "name")
 
             if !name? then
