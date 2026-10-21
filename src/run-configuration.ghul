@@ -520,7 +520,15 @@ namespace Tester is
 
             let version = File.read_all_text(version_file).trim()
 
-            let lines = LIST[string](["--library-source", "{name}@{version}={root}"])
+            let lines = LIST[string]()
+
+            // The loader that runs a wasm program ships with the core
+            // library, beside its sources.
+            if name =~ "ghul-core" then
+                lines.add_range(["--wasm-loader", Path.join(root, "host", "loader.mjs")])
+            fi
+
+            lines.add_range(["--library-source", "{name}@{version}={root}"])
 
             let sources: JsonElement mut
 

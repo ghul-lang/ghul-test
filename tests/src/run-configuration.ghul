@@ -170,6 +170,37 @@ namespace Tests is
         si
 
         @Test()
+        RUN_CONFIGURATION__read__given_the_ghul_core_library__names_the_loader_that_ships_with_it() is
+            let file = a_file(
+                "{{ \"configurations\": {{ \"ci\": {{ "
+                "\"compiler\": {{ \"publish\": \"publish\" }}, "
+                "\"targets\": {{ \"wasm\": {{ \"libraries\": [ "
+                "{{ \"name\": \"ghul-core\", \"root\": \"ghul-core\", \"sources\": \"src/**/*.ghul\" }} ] }} }} }} }} }}")
+
+            let base = Path.get_directory_name(file)!
+            let core = Path.join(base, "ghul-core")
+
+            Directory.create_directory(Path.join(core, "src"))
+            File.write_all_text(Path.join(core, "VERSION"), "1.0.0")
+            File.write_all_text(Path.join([core, "src", "a.ghul"]), "")
+
+            let flags = RUN_CONFIGURATION.read(file, "ci").target_flags["wasm"]
+            let lines = File.read_all_lines(flags.substring(flags.index_of('@') + 1))
+
+            should(string.join("\n", lines)).be(
+                string.join(
+                    "\n",
+                    [
+                        "--wasm-loader",
+                        Path.join([core, "host", "loader.mjs"]),
+                        "--library-source",
+                        "ghul-core@1.0.0={core}",
+                        Path.join([core, "src", "a.ghul"])
+                    ]),
+                "", [])
+        si
+
+        @Test()
         RUN_CONFIGURATION__read__given_run_targets__reads_the_targets_and_lets_an_extension_replace_them() is
             let file = a_file(
                 "{{ \"configurations\": {{ "
