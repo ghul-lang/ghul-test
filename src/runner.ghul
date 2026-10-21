@@ -46,6 +46,9 @@ namespace Tester is
         // is what is built.
         _target: TestTarget
 
+        // The target the test is built for.
+        target: TestTarget => _target
+
         // The project a ghul-cli test builds, or null for any other test.
         project: PROJECT? => _test.project
 
@@ -300,8 +303,8 @@ namespace Tester is
 
             let exit_status =
                 run(
-                    program_cli(COMPILER_UNDER_TEST.FORMATTED_BINARY),
-                    run_command_line(COMPILER_UNDER_TEST.FORMATTED_BINARY),
+                    program_cli(COMPILER_UNDER_TEST.formatted_binary(_target)),
+                    run_command_line(COMPILER_UNDER_TEST.formatted_binary(_target)),
                     PROGRAM_TIMEOUT_MS,
                     "formatted-run.out",
                     "formatted-run.err",
@@ -677,6 +680,7 @@ namespace Tester is
                     "format.diff",
                     "formatted.exe",
                     "formatted.mjs",
+                    "formatted.wasm",
                     "formatted.exe.mdb",
                     "formatted.runtimeconfig.json",
                     "formatted-compiler.out",
