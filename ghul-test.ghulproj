@@ -10,7 +10,7 @@
     <PackageProjectUrl>https://ghul.dev</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/degory/ghul-test</RepositoryUrl>
+    <RepositoryUrl>https://github.com/ghul-lang/ghul-test</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <RepositoryBranch>main</RepositoryBranch>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
