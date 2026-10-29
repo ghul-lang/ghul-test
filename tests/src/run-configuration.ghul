@@ -170,19 +170,20 @@ namespace Tests is
         si
 
         @Test()
-        RUN_CONFIGURATION__read__given_the_ghul_core_library__names_the_loader_that_ships_with_it() is
+        RUN_CONFIGURATION__read__given_a_library_naming_a_loader__passes_the_loader_from_within_its_root() is
             let file = a_file(
                 "{{ \"configurations\": {{ \"ci\": {{ "
                 "\"compiler\": {{ \"publish\": \"publish\" }}, "
                 "\"targets\": {{ \"wasm\": {{ \"libraries\": [ "
-                "{{ \"name\": \"ghul-core\", \"root\": \"ghul-core\", \"sources\": \"src/**/*.ghul\" }} ] }} }} }} }} }}")
+                "{{ \"name\": \"ghul-runtime\", \"root\": \"ghul-runtime\", \"sources\": \"src/**/*.ghul\", "
+                "\"loader\": \"host/loader.mjs\" }} ] }} }} }} }} }}")
 
             let base = Path.get_directory_name(file)!
-            let core = Path.join(base, "ghul-core")
+            let runtime = Path.join(base, "ghul-runtime")
 
-            Directory.create_directory(Path.join(core, "src"))
-            File.write_all_text(Path.join(core, "VERSION"), "1.0.0")
-            File.write_all_text(Path.join([core, "src", "a.ghul"]), "")
+            Directory.create_directory(Path.join(runtime, "src"))
+            File.write_all_text(Path.join(runtime, "VERSION"), "1.0.0")
+            File.write_all_text(Path.join([runtime, "src", "a.ghul"]), "")
 
             let flags = RUN_CONFIGURATION.read(file, "ci").target_flags["wasm"]
             let lines = File.read_all_lines(flags.substring(flags.index_of('@') + 1))
@@ -192,10 +193,10 @@ namespace Tests is
                     "\n",
                     [
                         "--wasm-loader",
-                        Path.join([core, "host", "loader.mjs"]),
+                        Path.join([runtime, "host", "loader.mjs"]),
                         "--library-source",
-                        "ghul-core@1.0.0={core}",
-                        Path.join([core, "src", "a.ghul"])
+                        "ghul-runtime@1.0.0={runtime}",
+                        Path.join([runtime, "src", "a.ghul"])
                     ]),
                 "", [])
         si
