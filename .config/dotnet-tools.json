@@ -10,7 +10,7 @@
       "rollForward": false
     },
     "ghul.cli": {
-      "version": "9.0.0",
+      "version": "9.5.1",
       "commands": [
         "ghul"
       ],

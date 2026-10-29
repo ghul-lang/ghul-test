@@ -522,10 +522,10 @@ namespace Tester is
 
             let lines = LIST[string]()
 
-            // The loader that runs a wasm program ships with the core
-            // library, beside its sources.
-            if name =~ "ghul-core" then
-                lines.add_range(["--wasm-loader", Path.join(root, "host", "loader.mjs")])
+            // The loader that runs a wasm program ships with the library
+            // that names it, at a path within its root.
+            if let loader = RUN_CONFIGURATION.string_property(library, "loader") then
+                lines.add_range(["--wasm-loader", Path.join(root, loader)])
             fi
 
             lines.add_range(["--library-source", "{name}@{version}={root}"])

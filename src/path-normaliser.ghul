@@ -47,8 +47,9 @@ namespace Tester is
 
         // The same, with a path under one of `libraries` written as the
         // library's name in angle brackets and the path within it, such as
-        // `<ghul-core>/src/tasks.ghul`: a library resolves to a different
-        // checkout in CI and in a workspace, so neither place appears.
+        // `<ghul-runtime>/ghul-core/src/tasks.ghul`: a library resolves to a
+        // different checkout in CI and in a workspace, so neither place
+        // appears.
         normalise(
             content: string,
             test_directory: string,
