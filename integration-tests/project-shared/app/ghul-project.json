@@ -3,6 +3,7 @@
     "targets": ["wasm"],
     "sources": ["src/**/*.ghul", "../shared/*.ghul"],
     "dependencies": {
+        "ghul-core": { "version": ">=0.0.0" },
         "ghul-runtime": { "version": ">=0.0.0" }
     }
 }

@@ -1,6 +1,7 @@
 {
     "name": "broken",
     "dependencies": {
+        "ghul-core": { "version": ">=0.0.0" },
         "ghul-runtime": { "version": ">=0.0.0" }
     }
 }
