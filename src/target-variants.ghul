@@ -40,7 +40,7 @@ namespace Tester is
                 File.read_all_text(Path.join(path, TARGETS))
                     .split([' ', '\t', '\r', '\n'])
                     |> filter(name => name.length > 0)
-                    |> collect_list()
+                    |> collect_mutable()
 
             if names.count == 0 then
                 problem! = "{TARGETS} names no target"
@@ -183,7 +183,7 @@ namespace Tester is
             name.starts_with("formatted") \/
             ARTIFACT_EXTENSIONS |> any(extension => name.ends_with(extension))
 
-        ARTIFACT_EXTENSIONS: string[] static =>
+        ARTIFACT_EXTENSIONS: ARRAY[string] static =>
             [".out", ".err", ".grep", ".sort", ".diff", ".exit", ".raw", ".tmp", ".mjs", ".wasm", ".exe", ".dll", ".pdb"]
     si
 si

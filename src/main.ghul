@@ -14,7 +14,7 @@ namespace Tester is
 
     class Main is
         @suppress("definite-assignment")
-        entry(arguments: string[]) -> int static is
+        entry(arguments: ARRAY[string]) -> int static is
             Std.output_encoding = UTF8Encoding()
 
             if arguments.count == 0 then

@@ -106,7 +106,7 @@ namespace Tester is
         // length then UTF-8; these file names are short) and the integers
         // are little-endian int32.
         _decode(
-            bytes: ubyte[],
+            bytes: ARRAY[ubyte],
             item: string,
             result: LIST[IL_OUTPUT_RANGE]
         ) static is
@@ -140,7 +140,7 @@ namespace Tester is
             od
         si
 
-        _read_int32_array(bytes: ubyte[], start: int) -> LIST[int] static is
+        _read_int32_array(bytes: ARRAY[ubyte], start: int) -> LIST[int] static is
             let count = BitConverter.to_int32(bytes, start)
             let result = LIST[int]()
 

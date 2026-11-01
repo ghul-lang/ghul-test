@@ -23,7 +23,7 @@ od
 
 Std.write_line("ok")
 
-png(raw: LIST[ubyte]) -> ubyte[] =>
+png(raw: LIST[ubyte]) -> ARRAY[ubyte] =>
     (let out = LIST[ubyte]()
 
      for value in [137ub, 80ub, 78ub, 71ub, 13ub, 10ub, 26ub, 10ub] do
@@ -43,7 +43,7 @@ png(raw: LIST[ubyte]) -> ubyte[] =>
      chunk(out, "IDAT", zlib(raw))
      chunk(out, "IEND", LIST[ubyte]())
 
-     out |> collect_array())
+     out |> collect())
 
 be32(out: LIST[ubyte], value: int) is
     out.add(cast ubyte((value >> 24) & 0xFF))

@@ -310,7 +310,7 @@ namespace Tester is
                 _tests
                     |> filter(test => test.direct_problem?)
                     |> map(test => test.direct_problem!)
-                    |> collect_list()
+                    |> collect_mutable()
 
             for reason in reasons |> Ghul.Pipes.distinct() do
                 Std.write_line("  with dotnet build: {reasons |> Ghul.Pipes.count(r => r =~ reason)} for {reason}")
@@ -519,7 +519,7 @@ namespace Tester is
                 return LIST[string]()
             fi
 
-            return TAG_FILTER.parse_tags(File.read_all_text(tags_path)) |> collect_list()
+            return TAG_FILTER.parse_tags(File.read_all_text(tags_path)) |> collect_mutable()
         si
     si
 si

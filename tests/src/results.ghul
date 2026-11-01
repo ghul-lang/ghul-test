@@ -12,7 +12,7 @@ namespace Tests is
     @TestClass()
     class Result_Should is
 
-        _n: object[]
+        _n: ARRAY[object]
 
         init() is
             _n = LIST[object](0).to_array()

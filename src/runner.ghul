@@ -1213,7 +1213,7 @@ namespace Tester is
                 return false
             fi
 
-            let args: string[] mut
+            let args: ARRAY[string] mut
 
             if ignore_space_changes then
                 args = ["-b", "--strip-trailing-cr", expected_file_name, actual_file_name]
@@ -1422,7 +1422,7 @@ namespace Tester is
         // the arrival of the first output tells them apart.
         drain_output(process: Process, timing: TIMING) -> string is
             let text = StringBuilder()
-            let buffer = (0..4096) |> map(_ => ' ') |> collect_array()
+            let buffer = (0..4096) |> map(_ => ' ') |> collect()
 
             do
                 let count =
@@ -1455,7 +1455,7 @@ namespace Tester is
         drive_session(process: Process, session_file_name: string, timing: TIMING) -> string is
             let pending = File.read_all_lines(get_path(session_file_name))
             let transcript = StringBuilder()
-            let buffer = (0..4096) |> map(_ => ' ') |> collect_array()
+            let buffer = (0..4096) |> map(_ => ' ') |> collect()
 
             let sent mut = 0
 
