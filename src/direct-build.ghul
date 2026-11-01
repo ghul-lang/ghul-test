@@ -292,7 +292,7 @@ namespace Tester is
             text.split([' ', '\t', '\r', '\n'])
                 |> map(word => word.trim('"'))
                 |> filter(word => word.length > 0)
-                |> collect_list()
+                |> collect_mutable()
 
         // Reads the properties and items of one file into `settings`, later
         // files overriding earlier ones as MSBuild's evaluation does. False,

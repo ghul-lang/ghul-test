@@ -14,14 +14,14 @@ namespace Tester is
         depth: int
         channels: int
 
-        pixels: ubyte[]
+        pixels: ARRAY[ubyte]
 
         init(
             width: int,
             height: int,
             depth: int,
             channels: int,
-            pixels: ubyte[]
+            pixels: ARRAY[ubyte]
         ) is
             self.width = width
             self.height = height
@@ -30,7 +30,7 @@ namespace Tester is
             self.pixels = pixels
         si
 
-        SIGNATURE: ubyte[] static =>
+        SIGNATURE: ARRAY[ubyte] static =>
             [137ub, 80ub, 78ub, 71ub, 13ub, 10ub, 26ub, 10ub]
 
         // The colour types, by the number of bytes each pixel takes at a
@@ -46,7 +46,7 @@ namespace Tester is
             else 0
             esac
 
-        _be32(bytes: ubyte[], at: int) -> int static =>
+        _be32(bytes: ARRAY[ubyte], at: int) -> int static =>
             (cast int(bytes[at]) << 24) |
             (cast int(bytes[at + 1]) << 16) |
             (cast int(bytes[at + 2]) << 8) |
@@ -54,7 +54,7 @@ namespace Tester is
 
         // Reads what the file says it holds, or throws saying why it could
         // not. A caller comparing two images wants the reason, not a null.
-        decode(bytes: ubyte[]) -> IMAGE static is
+        decode(bytes: ARRAY[ubyte]) -> IMAGE static is
             if bytes.count < 8 then
                 throw Exception("too short to be a PNG")
             fi
@@ -81,7 +81,7 @@ namespace Tester is
                     string(
                         (at + 4 .. at + 8)
                             |> map(index => cast char(bytes[index]))
-                            |> collect_array()
+                            |> collect()
                     )
 
                 if at + 12 + length > bytes.count then
@@ -129,7 +129,7 @@ namespace Tester is
                 depth,
                 channels,
                 _unfilter(
-                    _inflate(compressed |> collect_array()),
+                    _inflate(compressed |> collect()),
                     width,
                     height,
                     channels
@@ -139,7 +139,7 @@ namespace Tester is
 
         // The zlib wrapper is two bytes of header and four of checksum
         // around a raw deflate stream, which is what DeflateStream reads.
-        _inflate(zlib: ubyte[]) -> ubyte[] static is
+        _inflate(zlib: ARRAY[ubyte]) -> ARRAY[ubyte] static is
             if zlib.count < 6 then
                 throw Exception("the image data is too short to be a zlib stream")
             fi
@@ -178,11 +178,11 @@ namespace Tester is
         // Each scanline carries a filter byte saying how it was written in
         // terms of the bytes to its left and the line above.
         _unfilter(
-            raw: ubyte[],
+            raw: ARRAY[ubyte],
             width: int,
             height: int,
             channels: int
-        ) -> ubyte[] static is
+        ) -> ARRAY[ubyte] static is
             let stride = width * channels
 
             if raw.count != height * (stride + 1) then
@@ -235,7 +235,7 @@ namespace Tester is
                 od
             od
 
-            return out |> collect_array()
+            return out |> collect()
         si
 
         // What to say about two images that are not the same one, or null
@@ -255,7 +255,7 @@ namespace Tester is
             let differing =
                 (0..pixels.count)
                     |> filter(at => pixels[at] != other.pixels[at])
-                    |> collect_list()
+                    |> collect_mutable()
 
             if differing.count == 0 then
                 return null

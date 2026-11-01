@@ -21,7 +21,7 @@ namespace Tester is
 
         pid: int public
         cwd: string public
-        suites: string[] public
+        suites: ARRAY[string] public
 
         // "running" until the run finishes, then "done".
         state: string public
@@ -37,7 +37,7 @@ namespace Tester is
         percent: int public
 
         // Tests started but not yet finished, and the most recent finisher.
-        running: string[] public
+        running: ARRAY[string] public
         last: string public
 
         @suppress("field-definite-assignment")
@@ -90,7 +90,7 @@ namespace Tester is
 
             _record.version = 1
             _record.state = "running"
-            _record.suites = suites |> collect_array()
+            _record.suites = suites |> collect()
             _record.running = []
             _record.last = ""
 
@@ -216,7 +216,7 @@ namespace Tester is
             fi
 
             _record.updated_at = now()
-            _record.running = _running |> collect_array()
+            _record.running = _running |> collect()
 
             if _record.total > 0 then
                 _record.percent = 100 * _record.completed / _record.total

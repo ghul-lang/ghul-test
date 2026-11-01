@@ -17,7 +17,7 @@ namespace Tester is
     class TEST_TARGETS is
         /// The names the targets are known by, as `--target` and a `targets`
         /// file spell them.
-        names: string[] static => ["dotnet", "wasm", "llvm"]
+        names: ARRAY[string] static => ["dotnet", "wasm", "llvm"]
 
         /// The target `name` names, or null where it names none ghul-test
         /// knows how to run.

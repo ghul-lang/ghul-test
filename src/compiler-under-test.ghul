@@ -138,7 +138,7 @@ namespace Tester is
         si
 
         _words(command: string) -> Collections.List[string] =>
-            command.split([' ']) |> filter(word => word.length > 0) |> collect_list()
+            command.split([' ']) |> filter(word => word.length > 0) |> collect_mutable()
 
         // MSBuild's console logger ends each diagnostic with the project
         // it came from, in brackets. A project test built directly gets the
@@ -191,7 +191,7 @@ namespace Tester is
 
             let pack_dlls = Directory.get_files(reference_path, "*.dll") |>
                 sort() |>
-                collect_list()
+                collect_mutable()
 
             for dll in pack_dlls do
                 arguments.add("-a")
