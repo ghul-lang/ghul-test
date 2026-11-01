@@ -122,6 +122,27 @@ namespace Tests is
                 "--version 1.0.0 --debug --msbuild-diagnostics --warn-as-error null-deref --suppress impure-function-argument", "", [])
         si
 
+        // The target name is built at run time, as one read from a
+        // configuration is, so a reference comparison with the literal
+        // would not match it.
+        @Test()
+        read__for_wasm__names_the_output_a_wasm_module() is
+            let directory = IO.Path.combine(IO.Path.get_temp_path(), IO.Path.get_random_file_name())
+
+            IO.Directory.create_directory(directory)
+
+            try
+                IO.File.write_all_text(IO.Path.combine(directory, "task.ghulproj"), _task("", ""))
+
+                let problem: string? mut = null
+                let build = DIRECT_BUILD.read(directory, "net10.0", "{"wa"}{"sm"}", Collections.SET[string](), problem ref)
+
+                should(build?.output_name ?? problem ?? "").be("binary.wasm", "", [])
+            finally
+                IO.Directory.delete(directory, true)
+            yrt
+        si
+
         @Test()
         from_text__for_another_target__accepts_a_package_a_library_stands_for() is
             let problem: string? mut = null
