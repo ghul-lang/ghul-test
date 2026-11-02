@@ -61,6 +61,32 @@ fi
 echo integration-tests/execution-pass: PASS
 
 
+echo integration-tests/fixture...
+
+# The program deletes and writes files in its working directory, which is a
+# copy of the test's fixture/, so a second run finds the fixture as it was
+# and the test directory holds nothing the program wrote.
+FIXTURE_CASE=integration-tests/fixture/fixture-files
+
+for run in 1 2 ; do
+    if ! TEST_PROCESSES=1 $RUNNER $FIXTURE_CASE > actual-output 2>&1 ; then
+        cat actual-output
+
+        echo "integration-tests/fixture failed on run $run"
+
+        exit 1
+    fi
+done
+
+if [ -e $FIXTURE_CASE/written.txt ] || [ ! -f $FIXTURE_CASE/fixture/input.txt ] || [ ! -f $FIXTURE_CASE/fixture/docs/.keep ] ; then
+    echo integration-tests/fixture: the run changed the test directory
+
+    exit 1
+fi
+
+echo integration-tests/fixture: PASS
+
+
 echo integration-tests/runtime-dll-override-valid...
 
 # The configuration names the runtime a test runs against, and hello-world

@@ -41,6 +41,10 @@ namespace Tester is
         // carried onto its result so a reporter can say it.
         _program_timing: TIMING?
 
+        // Where the program runs while it runs from a copy of the test's
+        // `fixture/`, and null otherwise, when it runs in the test directory.
+        _run_directory: string?
+
         // The target the test is built for, which says how its program is
         // run: said by its flags, or by its project file where the project
         // is what is built.
@@ -302,6 +306,7 @@ namespace Tester is
             fi
 
             let exit_status =
+                in_fixture(() =>
                 run(
                     program_cli(COMPILER_UNDER_TEST.formatted_binary(_target)),
                     run_command_line(COMPILER_UNDER_TEST.formatted_binary(_target)),
@@ -311,6 +316,7 @@ namespace Tester is
                     null,
                     input_file(),
                     session_file()
+                )
                 )
 
             if
@@ -351,6 +357,8 @@ namespace Tester is
         si
 
         FORMATTED_DIRECTORY: string static => "formatted"
+
+        FIXTURE: string static => "fixture"
 
         RUN_EXPECTED: string static => "run.expected"
 
@@ -438,17 +446,75 @@ namespace Tester is
                     // loader's spelling.
                     let module = direct?.output_name ?? (Path.change_extension(binary, ".wasm") ?? binary)
 
-                    command_line.add(module)
+                    command_line.add(from_test(module))
                 else
-                    command_line.add(Path.change_extension(binary, ".mjs") ?? binary)
+                    command_line.add(from_test(Path.change_extension(binary, ".mjs") ?? binary))
                 fi
             elif _target == TestTarget.DOTNET then
-                command_line.add(binary)
+                command_line.add(from_test(binary))
             fi
 
             command_line.add_range(program_arguments())
 
             command_line
+        si
+
+        // A path relative to the test directory, as the program has to be
+        // handed it: unchanged where it runs there, and in full where it runs
+        // from a copy of the test's `fixture/`.
+        from_test(path: string) -> string =>
+            if _run_directory? then Path.get_full_path(get_path(path)) else path fi
+
+        // Runs `run` with the program's working directory set to a fresh copy
+        // of the test's `fixture/` where the test has one, so a program that
+        // writes, renames or deletes files leaves the test directory as it
+        // was. The copy is removed afterwards, whatever the run did.
+        in_fixture(run: () -> int) -> int is
+            let fixture = copy_fixture()
+
+            _run_directory = fixture
+
+            try
+                return run()
+            finally
+                _run_directory = null
+
+                if let directory = fixture then
+                    Directory.delete(directory, true)
+                fi
+            yrt
+        si
+
+        copy_fixture() -> string? is
+            let source = get_path(FIXTURE)
+
+            if !Directory.exists(source) then
+                return null
+            fi
+
+            let copy = Path.join([Path.get_temp_path(), "ghul-test-fixture-{System.Guid.new_guid()}"])
+
+            copy_tree(source, copy)
+
+            return copy
+        si
+
+        // Git keeps no empty directory, so one is committed holding a `.keep`
+        // file: the copy makes the directory and leaves the `.keep` out.
+        copy_tree(source: string, target: string) is
+            Directory.create_directory(target)
+
+            for file in Directory.get_files(source) do
+                let name = Path.get_file_name(file) ?? ""
+
+                if name !~ ".keep" then
+                    File.copy(file, Path.join([target, name]))
+                fi
+            od
+
+            for directory in Directory.get_directories(source) do
+                copy_tree(directory, Path.join([target, Path.get_file_name(directory) ?? ""]))
+            od
         si
 
         // The exit status a test says its program should end with, for a
@@ -722,6 +788,7 @@ namespace Tester is
 
             try
                 exit_status =
+                    in_fixture(() =>
                     run(
                         program_cli(_compiler_under_test.get_binary_path_relative_to_test_folder(self)),
                         // but this needs to be a path relative to the directory
@@ -734,6 +801,7 @@ namespace Tester is
                         input_file(),
                         session_file(),
                         _program_timing!
+                    )
                     )
             catch e: System.ComponentModel.Win32Exception
                 if _target == TestTarget.WASM then
@@ -1327,7 +1395,7 @@ namespace Tester is
                 start_info.argument_list.add(argument)
             od
 
-            start_info.working_directory = _test.path
+            start_info.working_directory = _run_directory ?? _test.path
 
             start_info.redirect_standard_output = true
             start_info.redirect_standard_error = true
