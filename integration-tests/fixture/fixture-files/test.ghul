@@ -1,0 +1,10 @@
+use default
+
+write_line(IO.File.read_all_text("input.txt").trim())
+write_line("{IO.Directory.exists("docs")} {IO.File.exists("docs/.keep")}")
+
+IO.File.delete("input.txt")
+IO.Directory.delete("docs")
+IO.File.write_all_text("written.txt", "written")
+
+write_line("{IO.File.exists("input.txt")} {IO.Directory.exists("docs")}")
