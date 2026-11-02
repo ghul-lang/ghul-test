@@ -64,9 +64,12 @@ jobs:
     # push reads it: restore takes the compiler from nuget.org, and registering
     # the feed as a source made every pull request's restore query it with a
     # token the organization does not grant, which answers 403.
+    # id-token lets the job ask GitHub for the short-lived token nuget.org
+    # trades for a publishing key.
     permissions:
       contents: read
       packages: write
+      id-token: write
 
     container:
       image: mcr.microsoft.com/dotnet/sdk:10.0
@@ -105,11 +108,19 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+    # The key nuget.org hands back is single use and lasts an hour, so the
+    # exchange is made immediately before the push.
+    - name: Ask nuget.org for a publishing key
+      if: ${{ github.event_name == 'push' }}
+      id: login
+      uses: NuGet/login@v1
+      with:
+        # The nuget.org profile name, which is not an email address.
+        user: ${{ secrets.NUGET_USER }}
+
     - name: Publish package to NuGet
       if: ${{ github.event_name == 'push' }}
-      run: dotnet nuget push ./nupkg/*.nupkg -k ${NUGET_TOKEN} -s https://api.nuget.org/v3/index.json --skip-duplicate --no-symbols
-      env:
-        NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
+      run: dotnet nuget push ./nupkg/*.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate --no-symbols
 
   create_release:
     needs: [version, build]
