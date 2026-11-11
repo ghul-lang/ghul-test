@@ -160,7 +160,7 @@ namespace Tester is
 
                 if let named = compiler_option then
                     publish_directory = COMPILER_OPTION.publish_directory_of(named)
-                    published_command = null
+                    published_command = if COMPILER_OPTION.names_dll(named) then null else named fi
                     run_mode = CompilerRunMode.LOCAL
                 fi
             else
@@ -173,6 +173,7 @@ namespace Tester is
             try
                 compiler_under_test = COMPILER_UNDER_TEST(run_mode, publish_directory, published_command)
 
+                compiler_under_test.reference_assemblies = configuration.reference_assemblies
                 compiler_under_test.set_runtime_path(runtime_dll_override)
                 compiler_under_test.set_compiler_command(compiler_override)
                 compiler_under_test.set_ghul_command(ghul_command)
@@ -187,7 +188,14 @@ namespace Tester is
 
             if run_mode == CompilerRunMode.DOTNET then
                 report_compiler_under_test(compiler_under_test)
+            elif run_mode == CompilerRunMode.LOCAL \/ run_mode == CompilerRunMode.CI then
+                // How a run is reproduced, from the log alone: the compiler
+                // each test is built with and the targets the run covers,
+                // written with the configuration's name.
+                Std.error.write_line("compiler under test: {compiler_under_test.build_command}")
             fi
+
+            Std.error.write_line("targets: {if let covered = run_targets then covered |> Ghul.Pipes.map(t => "{t}".to_lower_invariant()) |> Ghul.Pipes.join(", ") else "every target a test names" fi}")
 
             let tag_filter = TAG_FILTER(requested_tags, excluded_tags)
 
@@ -230,7 +238,8 @@ namespace Tester is
                     PROGRESS_REPORTER(requested.paths),
                     tag_filter,
                     shard,
-                    target_flags)
+                    target_flags,
+                    configuration.processes)
 
             queue.run_targets = run_targets
             queue.build_targets = configuration.build_targets

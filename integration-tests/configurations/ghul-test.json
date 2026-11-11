@@ -37,6 +37,29 @@
         },
         "no-runtime": {
             "compiler": "tool"
+        },
+        // A compiler run as written, which records the arguments it is given
+        // and fails the build: handed the reference assemblies, as a .NET
+        // compiler is, and not, as one hosted elsewhere is.
+        "recorded": {
+            "extends": "tool",
+            "compiler": { "path": "record-compiler.sh" }
+        },
+        "recorded-no-references": {
+            "extends": "tool",
+            "compiler": { "path": "record-compiler.sh", "reference_assemblies": false }
+        },
+        "bad-references": {
+            "extends": "tool",
+            "compiler": { "path": "record-compiler.sh", "reference_assemblies": "no" }
+        },
+        "three-processes": {
+            "extends": "tool",
+            "processes": 3
+        },
+        "no-processes": {
+            "extends": "tool",
+            "processes": 0
         }
     }
 }
