@@ -238,25 +238,32 @@ fi
 echo integration-tests/compiler-override-missing: PASS
 
 
-echo integration-tests/compiler-override-wrong-mode...
+echo integration-tests/compiler-override-command...
 
-# Under a build that runs the compiler directly, --compiler names a published
-# compiler, so a command that is not one fails rather than being ignored.
-TEST_PROCESSES=1 $RUNNER --compiler /bin/false integration-tests/execution-pass | tee actual-output
+# Under a build that runs the compiler directly, --compiler naming anything but
+# a .dll is the compiler itself, run as written, as a native or Node-hosted
+# compiler is: a command that is not a compiler fails the build it was handed.
+TEST_PROCESSES=1 $RUNNER --compiler /bin/false integration-tests/execution-pass 2>&1 | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
-    echo integration-tests/compiler-override-wrong-mode did not exit 1
+    echo integration-tests/compiler-override-command did not exit 1
 
     exit 1
 fi
 
-if ! grep -q "Could not find published compiler" actual-output ; then
-    echo integration-tests/compiler-override-wrong-mode did not report the mode error
+if ! grep -q "^compiler under test: /bin/false --v3 --test-run$" actual-output ; then
+    echo integration-tests/compiler-override-command did not report the command it ran
 
     exit 1
 fi
 
-echo integration-tests/compiler-override-wrong-mode: PASS
+if ! grep -q "unexpected build failure" actual-output ; then
+    echo integration-tests/compiler-override-command did not fail the build
+
+    exit 1
+fi
+
+echo integration-tests/compiler-override-command: PASS
 
 echo integration-tests/undiscovered...
 
@@ -1134,6 +1141,64 @@ fi
 expect_configuration_problem "unknown build target" "build_targets names cobol" --config build-targets-unknown ../build-targets
 
 expect_configuration_problem "unknown run target" "run_targets names cobol" --config unknown-target tests
+
+# recorded_arguments <configuration> [options...]: runs the configuration,
+# whose compiler records what it was given and fails, and leaves the
+# arguments in compiler-arguments and the run's output, stderr too, in
+# actual-output.
+recorded_arguments() {
+    local name=$1
+    shift
+
+    rm -f integration-tests/configurations/compiler-arguments
+    (cd integration-tests/configurations && env -u CI TEST_PROCESSES=1 $CONFIG_RUNNER --config "$name" "$@" tests 2>&1) > actual-output
+
+    if [ ! -f integration-tests/configurations/compiler-arguments ] ; then
+        cat actual-output
+        echo integration-tests/configurations: $name did not run its compiler
+        exit 1
+    fi
+}
+
+recorded_arguments recorded
+
+if ! grep -qx -- "-a" integration-tests/configurations/compiler-arguments ; then
+    echo integration-tests/configurations: recorded was not handed the reference assemblies
+    exit 1
+fi
+
+if ! grep -q "^compiler under test: $(pwd)/integration-tests/configurations/record-compiler.sh --v3 --test-run$" actual-output || ! grep -q "^targets: every target a test names$" actual-output ; then
+    cat actual-output
+    echo integration-tests/configurations: recorded did not report its compiler and targets
+    exit 1
+fi
+
+recorded_arguments recorded-no-references
+
+if grep -qx -- "-a" integration-tests/configurations/compiler-arguments ; then
+    echo integration-tests/configurations: recorded-no-references was handed reference assemblies
+    exit 1
+fi
+
+# --compiler names the compiler; the configuration still says what it is given.
+recorded_arguments recorded-no-references --compiler "$(pwd)/integration-tests/configurations/record-compiler.sh"
+
+if grep -qx -- "-a" integration-tests/configurations/compiler-arguments ; then
+    echo integration-tests/configurations: --compiler overrode reference_assemblies
+    exit 1
+fi
+
+rm -f integration-tests/configurations/compiler-arguments
+
+(cd integration-tests/configurations && env -u CI -u TEST_PROCESSES $CONFIG_RUNNER --config three-processes tests) | tee actual-output
+
+if ! grep -q "using 3 processes to run tests" actual-output ; then
+    echo integration-tests/configurations: three-processes did not run three at once
+    exit 1
+fi
+
+expect_configuration_problem "bad reference_assemblies" "reference_assemblies must be true or false" --config bad-references tests
+expect_configuration_problem "no processes" "processes must be a whole number of at least 1" --config no-processes tests
 
 expect_configuration_problem "unknown" "has no configuration named nightly" --config nightly tests
 expect_configuration_problem "incomplete" "names its runtime" --config no-runtime tests

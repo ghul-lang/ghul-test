@@ -20,7 +20,8 @@ namespace Tester is
         progress_reporter: PROGRESS_REPORTER private,
         tag_filter: TAG_FILTER private,
         shard: SHARD private,
-        target_flags: Collections.Map[string, string] private
+        target_flags: Collections.Map[string, string] private,
+        processes: int? private
     ) is
         _task_queue: TASK_QUEUE
 
@@ -86,6 +87,8 @@ namespace Tester is
 
             if requested_test_processes? then
                 actual_test_processes = System.Convert.to_int32(requested_test_processes)
+            elif let configured = _processes then
+                actual_test_processes = configured
             else
                 let cpu_count = System.Environment.processor_count
 

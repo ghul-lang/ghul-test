@@ -32,8 +32,14 @@ namespace Tester is
         _use_dotnet: bool
         _compiler_command: string?
 
+        /// Whether the compiler is handed the reference assemblies, from the
+        /// configuration's `reference_assemblies`.
+        reference_assemblies: bool public
+
         @suppress("field-definite-assignment")
         init(..) is
+            reference_assemblies = true
+
             if _run_mode == CompilerRunMode.GHUL_CLI then
                 _executable = "ghul"
                 _arguments = ["build"]
@@ -97,6 +103,10 @@ namespace Tester is
         si
 
         runtime_path: string => _runtime_path
+
+        /// The command a `compiler` build runs the compiler with, before each
+        /// test's own flags and sources, as a run reports it.
+        build_command: string => "{_executable} {_arguments |> Ghul.Pipes.join(" ")}"
 
         set_runtime_path(path: string?) is
             if !path? \/ string.is_null_or_white_space(path) then
@@ -182,6 +192,10 @@ namespace Tester is
 
         reference_arguments(runtime_path: string) -> Iterable[string] is
             let arguments = LIST[string]()
+
+            if !reference_assemblies then
+                return arguments
+            fi
 
             // A project build finds the pack only once a project is
             // built directly, since MSBuild finds its own.

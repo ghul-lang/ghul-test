@@ -42,6 +42,16 @@ namespace Tester is
         /// to leave each project to its own.
         compiler_command: string?
 
+        /// Whether a `compiler` build hands the compiler the reference
+        /// assemblies: the .NET SDK's and the runtime's. True unless the
+        /// `compiler` object says `"reference_assemblies": false`, as for a
+        /// compiler hosted outside .NET, which reads no assemblies.
+        reference_assemblies: bool
+
+        /// How many tests run at once, from `processes`, or null for a number
+        /// derived from the processor count.
+        processes: int?
+
         /// The runtime a test's program runs against, or null for the one
         /// beside the compiler.
         runtime_path: string?
@@ -80,6 +90,7 @@ namespace Tester is
         init(name: string) is
             self.name = name
             build = "compiler"
+            reference_assemblies = true
             target_flags = MAP[string, string]()
             package_flags = MAP[string, MAP[string, string]]()
         si
@@ -194,6 +205,18 @@ namespace Tester is
                 ghul_command = ghul
             fi
 
+            let processes_value: JsonElement mut
+
+            if entry.try_get_property("processes", processes_value ref) then
+                let count: int mut
+
+                if processes_value.value_kind != JsonValueKind.NUMBER \/ !processes_value.try_get_int32(count ref) \/ count < 1 then
+                    throw Exception("{file}: {name}: processes must be a whole number of at least 1")
+                fi
+
+                processes = count
+            fi
+
             if let target = string_property(entry, "ghul_target") then
                 ghul_target = target
             fi
@@ -272,6 +295,7 @@ namespace Tester is
             uses_tool = false
             publish_directory = null
             compiler_command = null
+            reference_assemblies = true
 
             if compiler.value_kind == JsonValueKind.STRING then
                 let kind = compiler.get_string()
@@ -295,11 +319,28 @@ namespace Tester is
                 let full = Path.get_full_path(Path.combine(base, path))
 
                 publish_directory = Path.get_directory_name(full)
-                compiler_command = if full.ends_with(".dll") then "dotnet {full}" else full fi
+                compiler_command =
+                    if full.ends_with(".dll") then
+                        "dotnet {full}"
+                    elif full.ends_with(".mjs") then
+                        "node {full}"
+                    else
+                        full
+                    fi
             elif let command = string_property(compiler, "command") then
                 compiler_command = command
             else
                 throw Exception("{file}: {name}: compiler must name publish, path or command")
+            fi
+
+            let references: JsonElement mut
+
+            if compiler.try_get_property("reference_assemblies", references ref) then
+                if references.value_kind == JsonValueKind.FALSE then
+                    reference_assemblies = false
+                elif references.value_kind != JsonValueKind.TRUE then
+                    throw Exception("{file}: {name}: compiler: reference_assemblies must be true or false")
+                fi
             fi
         si
 
@@ -724,5 +765,13 @@ namespace Tester is
 
             return Path.get_directory_name(Path.get_full_path(compiler)) ?? "."
         si
+
+        /// Whether `command` ends with a `.dll`, the published compiler whose
+        /// directory supplies the compiler's launcher and the runtime.
+        /// Any other command is the compiler itself, run as written.
+        ///
+        /// - command: what `--compiler` was given
+        names_dll(command: string) -> bool static =>
+            command.trim().ends_with(".dll")
     si
 si
