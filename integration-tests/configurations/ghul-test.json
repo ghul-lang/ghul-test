@@ -45,6 +45,25 @@
             "extends": "tool",
             "compiler": { "path": "record-compiler.sh" }
         },
+        // The loader a library names reaches a wasm build that brings its
+        // own core library, without the library's sources.
+        "recorded-loader": {
+            "extends": "tool",
+            "compiler": { "path": "record-compiler.sh", "reference_assemblies": false },
+            "run_targets": ["wasm"],
+            "targets": {
+                "wasm": {
+                    "libraries": [
+                        {
+                            "name": "loader-library",
+                            "root": "loader-library",
+                            "sources": "src/**/*.ghul",
+                            "loader": "loader.mjs"
+                        }
+                    ]
+                }
+            }
+        },
         "recorded-no-references": {
             "extends": "tool",
             "compiler": { "path": "record-compiler.sh", "reference_assemblies": false }

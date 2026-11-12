@@ -62,6 +62,10 @@ namespace Tester is
 
         _package_flags: Collections.Map[string, Collections.MAP[string, string]]
 
+        /// For each target, the loader its wasm builds are given where a
+        /// test doesn't name one itself.
+        target_loaders: Collections.Map[string, string] public
+
         _covers(target: TestTarget) -> bool =>
             if let targets = run_targets then targets |> any(t => t == target) else true fi
 
@@ -108,6 +112,7 @@ namespace Tester is
             _passed_over_reasons = LIST[string]()
             _overridden = LIST[string]()
             _package_flags = Collections.MAP[string, Collections.MAP[string, string]]()
+            target_loaders = Collections.MAP[string, string]()
         si
 
         run_queued_tests() is
@@ -272,7 +277,7 @@ namespace Tester is
                 TEST(
                     path,
                     source_files,
-                    flags,
+                    with_loader(flags),
                     is_build_failure_expected,
                     tags
                 )
@@ -287,6 +292,24 @@ namespace Tester is
             fi
 
             queue_test(test)
+        si
+
+        // A compiler build's flags with the loader the configuration gives
+        // the target they name, unless they name a loader themselves. Only
+        // a test built once needs this: a variant's flags carry the target's
+        // library lines, the loader among them.
+        with_loader(flags: string) -> string is
+            if _compiler_under_test.is_dotnet_build \/ _compiler_under_test.is_ghul_cli then
+                return flags
+            fi
+
+            if let target = TEST.named_target_name(flags) then
+                if target_loaders.contains_key(target) /\ !(flags.split([' ', '\t', '\r', '\n']) |> any(w => w =~ "--wasm-loader")) then
+                    return "{flags.trim()} --wasm-loader {target_loaders[target]}"
+                fi
+            fi
+
+            return flags
         si
 
         // The flags the configuration gives runs under `target`, with a

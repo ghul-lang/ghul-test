@@ -1,0 +1,3 @@
+// A wasm test that brings its own core library.
+entry() is
+si
