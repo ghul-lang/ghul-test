@@ -87,12 +87,19 @@ namespace Tester is
         /// references it.
         package_flags: MAP[string, MAP[string, string]]
 
+        /// For each target, the loader a library names for it: given to
+        /// every wasm build under the target, a test that brings its own
+        /// core library included, and never in place of a loader the test
+        /// names itself.
+        target_loaders: MAP[string, string]
+
         init(name: string) is
             self.name = name
             build = "compiler"
             reference_assemblies = true
             target_flags = MAP[string, string]()
             package_flags = MAP[string, MAP[string, string]]()
+            target_loaders = MAP[string, string]()
         si
 
         /// The file at or above `from`, or null where there is none.
@@ -287,6 +294,10 @@ namespace Tester is
 
                     target_flags[target.name] = TARGET_LIBRARIES.flags(target.value, base, "{file}: {name}: {target.name}")
                     package_flags[target.name] = TARGET_LIBRARIES.package_flags(target.value, base, "{file}: {name}: {target.name}")
+
+                    if let loader = TARGET_LIBRARIES.loader(target.value, base, "{file}: {name}: {target.name}") then
+                        target_loaders[target.name] = loader
+                    fi
                 od
             fi
         si
@@ -479,6 +490,40 @@ namespace Tester is
             fi
 
             return string.join(" ", result)
+        si
+
+        /// The loader a library in `entry` names, as a full path, or null
+        /// where none names one.
+        ///
+        /// - entry: the target's entry in the configuration
+        /// - base: the directory relative paths are taken from
+        /// - context: what to name in a diagnostic
+        loader(entry: JsonElement, base: string, context: string) -> string? static is
+            let libraries: JsonElement mut
+
+            if entry.value_kind != JsonValueKind.OBJECT \/ !entry.try_get_property("libraries", libraries ref) \/ libraries.value_kind != JsonValueKind.ARRAY then
+                return null
+            fi
+
+            let result: string? mut = null
+
+            for library in libraries.enumerate_array() do
+                if library.value_kind != JsonValueKind.OBJECT then
+                    continue
+                fi
+
+                if let loader = RUN_CONFIGURATION.string_property(library, "loader") then
+                    let name = RUN_CONFIGURATION.string_property(library, "name") ?? "a library"
+
+                    if result? then
+                        throw Exception("{context}: two libraries name a loader")
+                    fi
+
+                    result = Path.join(_root(library, base, "{context}: {name}"), loader)
+                fi
+            od
+
+            return result
         si
 
         /// The flags each library in `entry` that names a `package` adds,

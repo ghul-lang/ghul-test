@@ -195,6 +195,10 @@ namespace Tester is
                 Std.error.write_line("compiler under test: {compiler_under_test.build_command}")
             fi
 
+            for (loader_target, loader) in configuration.target_loaders do
+                Std.error.write_line("{loader_target} loader: {loader}")
+            od
+
             Std.error.write_line("targets: {if let covered = run_targets then covered |> Ghul.Pipes.map(t => "{t}".to_lower_invariant()) |> Ghul.Pipes.join(", ") else "every target a test names" fi}")
 
             let tag_filter = TAG_FILTER(requested_tags, excluded_tags)
@@ -244,6 +248,7 @@ namespace Tester is
             queue.run_targets = run_targets
             queue.build_targets = configuration.build_targets
             queue.package_flags = configuration.package_flags
+            queue.target_loaders = configuration.target_loaders
 
             for path in requested.paths do
                 if !Directory.exists(path) then

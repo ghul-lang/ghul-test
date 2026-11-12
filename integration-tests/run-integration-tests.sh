@@ -1173,6 +1173,39 @@ if ! grep -q "^compiler under test: $(pwd)/integration-tests/configurations/reco
     exit 1
 fi
 
+# recorded_loader <test>: runs the recorded-loader configuration on one of
+# its wasm tests, as recorded_arguments does.
+recorded_loader() {
+    rm -f integration-tests/configurations/compiler-arguments
+    (cd integration-tests/configurations && env -u CI TEST_PROCESSES=1 $CONFIG_RUNNER --config recorded-loader "wasm-tests/$1" 2>&1) > actual-output
+
+    if [ ! -f integration-tests/configurations/compiler-arguments ] ; then
+        cat actual-output
+        echo integration-tests/configurations: recorded-loader did not run its compiler for $1
+        exit 1
+    fi
+}
+
+recorded_loader stub
+
+if ! grep -qx -- "$(pwd)/integration-tests/configurations/loader-library/loader.mjs" integration-tests/configurations/compiler-arguments || grep -q -- "--library-source" integration-tests/configurations/compiler-arguments ; then
+    echo integration-tests/configurations: recorded-loader did not give a wasm test with its own core the loader alone
+    exit 1
+fi
+
+if ! grep -q "^wasm loader: $(pwd)/integration-tests/configurations/loader-library/loader.mjs$" actual-output ; then
+    cat actual-output
+    echo integration-tests/configurations: recorded-loader did not name its loader in the header
+    exit 1
+fi
+
+recorded_loader named
+
+if [ "$(grep -cx -- "--wasm-loader" integration-tests/configurations/compiler-arguments)" != 1 ] || ! grep -qx "own.mjs" integration-tests/configurations/compiler-arguments ; then
+    echo integration-tests/configurations: recorded-loader replaced the loader a test names
+    exit 1
+fi
+
 recorded_arguments recorded-no-references
 
 if grep -qx -- "-a" integration-tests/configurations/compiler-arguments ; then
