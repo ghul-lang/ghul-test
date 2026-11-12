@@ -295,7 +295,9 @@ namespace Tester is
         si
 
         // A compiler build's flags with the loader the configuration gives
-        // the target they name, unless they name a loader themselves.
+        // the target they name, unless they name a loader themselves. Only
+        // a test built once needs this: a variant's flags carry the target's
+        // library lines, the loader among them.
         with_loader(flags: string) -> string is
             if _compiler_under_test.is_dotnet_build \/ _compiler_under_test.is_ghul_cli then
                 return flags
