@@ -42,7 +42,7 @@ namespace Tester is
                 return result
             fi
 
-            Tasks.TASK.wait_any(_running_tasks |> map(t -> Tasks.TASK => t) |> collect())
+            Tasks.TASK.wait_any(_running_tasks |> map(t -> Tasks.TASK => t) |> ARRAY())
 
             let new_tasks = LIST[Tasks.TASK[Result]]()
 

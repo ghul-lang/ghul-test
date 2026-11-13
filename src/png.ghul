@@ -81,7 +81,7 @@ namespace Tester is
                     string(
                         (at + 4 .. at + 8)
                             |> map(index => cast char(bytes[index]))
-                            |> collect()
+                            |> ARRAY()
                     )
 
                 if at + 12 + length > bytes.count then
@@ -129,7 +129,7 @@ namespace Tester is
                 depth,
                 channels,
                 _unfilter(
-                    _inflate(compressed |> collect()),
+                    _inflate(compressed |> ARRAY()),
                     width,
                     height,
                     channels
@@ -235,7 +235,7 @@ namespace Tester is
                 od
             od
 
-            return out |> collect()
+            return out |> ARRAY()
         si
 
         // What to say about two images that are not the same one, or null
@@ -255,7 +255,7 @@ namespace Tester is
             let differing =
                 (0..pixels.count)
                     |> filter(at => pixels[at] != other.pixels[at])
-                    |> collect_mutable()
+                    |> LIST()
 
             if differing.count == 0 then
                 return null

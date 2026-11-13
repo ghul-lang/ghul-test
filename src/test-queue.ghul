@@ -336,7 +336,7 @@ namespace Tester is
                 _tests
                     |> filter(test => test.direct_problem?)
                     |> map(test => test.direct_problem!)
-                    |> collect_mutable()
+                    |> LIST()
 
             for reason in reasons |> Ghul.Pipes.distinct() do
                 Std.write_line("  with dotnet build: {reasons |> Ghul.Pipes.count(r => r =~ reason)} for {reason}")
@@ -393,7 +393,7 @@ namespace Tester is
                 let named = TARGET_VARIANTS.read(path, flags, problem)
 
                 if let wanted = build_targets /\ named? then
-                    let left_out = wanted |> filter(target => !(named |> any(n => n =~ target))) |> collect()
+                    let left_out = wanted |> filter(target => !(named |> any(n => n =~ target))) |> ARRAY()
 
                     if left_out.count > 0 then
                         _overridden.add("{path}: its {TARGET_VARIANTS.TARGETS} file wins over build_targets, so it is not built for {string.join(", ", left_out)}")
@@ -507,7 +507,7 @@ namespace Tester is
         // The packages, in lower case, a library stands for under `target`.
         known_packages(target: string) -> Collections.Set[string] =>
             if _package_flags.contains_key(target) then
-                _package_flags[target].keys |> collect_set()
+                _package_flags[target].keys |> Collections.SET()
             else
                 Collections.SET[string]()
             fi
@@ -532,7 +532,7 @@ namespace Tester is
         si
 
         _words(text: string) -> Iterable[string] =>
-            text.split([' ', '\t', '\r', '\n']) |> filter(word => word.length > 0) |> collect()
+            text.split([' ', '\t', '\r', '\n']) |> filter(word => word.length > 0) |> ARRAY()
 
         get_source_files(path: string) -> Iterable[string] =>
             Directory.get_files(path, "*.ghul")
@@ -545,7 +545,7 @@ namespace Tester is
                 return LIST[string]()
             fi
 
-            return TAG_FILTER.parse_tags(File.read_all_text(tags_path)) |> collect_mutable()
+            return TAG_FILTER.parse_tags(File.read_all_text(tags_path)) |> LIST()
         si
     si
 si
