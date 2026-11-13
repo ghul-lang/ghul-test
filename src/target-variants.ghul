@@ -176,12 +176,13 @@ namespace Tester is
         // into a variant, a leftover from an earlier run in the test
         // directory would be read as this run's.
         is_artifact(name: string) -> bool static =>
+            name !~ "externs.mjs" /\ (
             name =~ "failed" \/
             name =~ "ghul-runtime.dll" \/
             name =~ "out.il" \/
             name.starts_with("binary.") \/
             name.starts_with("formatted") \/
-            ARTIFACT_EXTENSIONS |> any(extension => name.ends_with(extension))
+            ARTIFACT_EXTENSIONS |> any(extension => name.ends_with(extension)))
 
         ARTIFACT_EXTENSIONS: ARRAY[string] static =>
             [".out", ".err", ".grep", ".sort", ".diff", ".exit", ".raw", ".tmp", ".mjs", ".wasm", ".exe", ".dll", ".pdb"]

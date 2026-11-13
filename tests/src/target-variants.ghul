@@ -1,0 +1,24 @@
+namespace Tests is
+    use Tester
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute
+
+    @TestClass()
+    class TARGET_VARIANTS_Should is
+
+        init() is si
+
+        @Test()
+        is_artifact__a_tests_externs_module__is_an_input() is
+            should(TARGET_VARIANTS.is_artifact("externs.mjs")).be_false("", [])
+        si
+
+        @Test()
+        is_artifact__the_copy_beside_the_loader__is_an_artifact() is
+            should(TARGET_VARIANTS.is_artifact("binary.externs.mjs")).be_true("", [])
+            should(TARGET_VARIANTS.is_artifact("binary.mjs")).be_true("", [])
+            should(TARGET_VARIANTS.is_artifact("other.mjs")).be_true("", [])
+        si
+    si
+si

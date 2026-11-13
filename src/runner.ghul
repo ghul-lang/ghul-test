@@ -430,6 +430,18 @@ namespace Tester is
             else _target_cli
             esac
 
+        // A wasm test that declares externs supplies them as `externs.mjs`
+        // beside its source. The loader the compiler writes beside the
+        // module imports `<module>.externs.mjs` from beside itself when it
+        // exists, so the test's module is copied there before the run.
+        supply_externs(binary_path: string) is
+            let externs = get_path("externs.mjs")
+
+            if File.exists(externs) then
+                File.copy(externs, Path.change_extension(binary_path, ".externs.mjs") ?? "{binary_path}.externs.mjs", true)
+            fi
+        si
+
         // The command line for a run: the binary, then whatever `run.args`
         // holds. A wasm test's program is started through the loader the
         // compiler wrote beside its module, which has the module's name and
@@ -718,6 +730,7 @@ namespace Tester is
                 delete_files([
                     "binary.exe",
                     "binary.mjs",
+                    "binary.externs.mjs",
                     "binary.wasm",
                     "binary.exe.mdb",
                     "binary.runtimeconfig.json",
@@ -780,6 +793,10 @@ namespace Tester is
             if !File.exists(binary_path) then
                 add_fail("no binary found: {binary_path}")
                 return false
+            fi
+
+            if _target == TestTarget.WASM then
+                supply_externs(binary_path)
             fi
 
             _program_timing = TIMING()
