@@ -90,7 +90,7 @@ namespace Tester is
 
             _record.version = 1
             _record.state = "running"
-            _record.suites = suites |> collect()
+            _record.suites = suites |> ARRAY()
             _record.running = []
             _record.last = ""
 
@@ -216,7 +216,7 @@ namespace Tester is
             fi
 
             _record.updated_at = now()
-            _record.running = _running |> collect()
+            _record.running = _running |> ARRAY()
 
             if _record.total > 0 then
                 _record.percent = 100 * _record.completed / _record.total

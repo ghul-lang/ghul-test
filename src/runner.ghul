@@ -653,7 +653,7 @@ namespace Tester is
                 [RUN_EXPECTED, RUN_CHECK, RUN_ARGS, RUN_IN, RUN_SESSION,
                  RUN_ERR_EXPECTED, RUN_EXIT_EXPECTED]
                     |> filter(name => File.exists(get_path(name)))
-                    |> collect()
+                    |> ARRAY()
 
             if !_test.is_library \/ describing_the_run.count == 0 then
                 return true
@@ -1507,7 +1507,7 @@ namespace Tester is
         // the arrival of the first output tells them apart.
         drain_output(process: Process, timing: TIMING) -> string is
             let text = StringBuilder()
-            let buffer = (0..4096) |> map(_ => ' ') |> collect()
+            let buffer = (0..4096) |> map(_ => ' ') |> ARRAY()
 
             do
                 let count =
@@ -1540,7 +1540,7 @@ namespace Tester is
         drive_session(process: Process, session_file_name: string, timing: TIMING) -> string is
             let pending = File.read_all_lines(get_path(session_file_name))
             let transcript = StringBuilder()
-            let buffer = (0..4096) |> map(_ => ' ') |> collect()
+            let buffer = (0..4096) |> map(_ => ' ') |> ARRAY()
 
             let sent mut = 0
 

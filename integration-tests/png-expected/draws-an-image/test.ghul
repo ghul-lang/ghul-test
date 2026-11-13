@@ -45,7 +45,7 @@ png(width: int, height: int, raw: LIST[ubyte]) -> ARRAY[ubyte] =>
      chunk(out, "IDAT", zlib(raw))
      chunk(out, "IEND", LIST[ubyte]())
 
-     out |> collect())
+     out |> ARRAY())
 
 be32(out: LIST[ubyte], value: int) is
     out.add(cast ubyte((value >> 24) & 0xFF))

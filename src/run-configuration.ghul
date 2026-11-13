@@ -805,7 +805,7 @@ namespace Tester is
         ///
         /// - command: what `--compiler` was given
         publish_directory_of(command: string) -> string static is
-            let words = command.split([' ']) |> filter(word => word.length > 0) |> collect()
+            let words = command.split([' ']) |> filter(word => word.length > 0) |> ARRAY()
             let compiler = if words.count > 0 then words[words.count - 1] else command fi
 
             return Path.get_directory_name(Path.get_full_path(compiler)) ?? "."

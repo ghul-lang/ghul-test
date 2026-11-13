@@ -40,7 +40,7 @@ namespace Tester is
                 File.read_all_text(Path.join(path, TARGETS))
                     .split([' ', '\t', '\r', '\n'])
                     |> filter(name => name.length > 0)
-                    |> collect_mutable()
+                    |> LIST()
 
             if names.count == 0 then
                 problem! = "{TARGETS} names no target"
@@ -54,7 +54,7 @@ namespace Tester is
                 fi
             od
 
-            if (names |> collect_set()).count != names.count then
+            if (names |> Collections.SET()).count != names.count then
                 problem! = "{TARGETS} names a target twice"
                 return null
             fi
@@ -90,7 +90,7 @@ namespace Tester is
 
             Directory.create_directory(directory)
 
-            let names = Directory.get_files(path) |> map(file => Path.get_file_name(file)!) |> collect_set()
+            let names = Directory.get_files(path) |> map(file => Path.get_file_name(file)!) |> Collections.SET()
 
             for name in names do
                 if let copied = name_in_variant(name, target, names) then

@@ -69,7 +69,7 @@ namespace Tests is
             let bumped =
                 _whole_assembly()
                     |> map(line => if line == "  .ver 8:0:1:0" then "  .ver 10:1:3:0" else line fi)
-                    |> collect_mutable()
+                    |> LIST()
 
             let before = IL_SNAPSHOT.narrow(_whole_assembly())
             let after = IL_SNAPSHOT.narrow(bumped)

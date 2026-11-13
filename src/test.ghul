@@ -33,7 +33,7 @@ namespace Tester is
 
         // The name `options` gives the target with `--target`, or null.
         named_target_name(options: string) -> string? static is
-            let words = options.split([' ', '\t', '\r', '\n']) |> filter(w => w.length > 0) |> collect()
+            let words = options.split([' ', '\t', '\r', '\n']) |> filter(w => w.length > 0) |> ARRAY()
 
             for i in 0..words.count - 1 do
                 if words[i] =~ "--target" then
