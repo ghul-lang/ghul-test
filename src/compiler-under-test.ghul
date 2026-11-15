@@ -299,6 +299,15 @@ namespace Tester is
 
                 name_the_project(runner.get_path("compiler.out"), direct.project_path)
             elif _run_mode == CompilerRunMode.DOTNET then
+                // A build in invariant globalization mode starts MSBuild
+                // nodes in that mode too, and a node left running for reuse
+                // is handed to the next build on the machine, whatever its
+                // culture: one asking for a named culture then kills it. So
+                // these nodes end with the build that started them.
+                if runner.uses_invariant_globalization then
+                    arguments.add("-nodeReuse:false")
+                fi
+
                 if _compiler_command? then
                     // MSBuild reads environment variables as properties, so
                     // this sets `GhulCompiler` for the build. Passing it on the
