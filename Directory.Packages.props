@@ -4,20 +4,20 @@
     <PackageVersion Include="ghul.runtime" Version="42.0.0" />
 
     <!-- ghūl compiler dependencies -->
-    <PackageVersion Include="System.Reflection.MetadataLoadContext" Version="10.0.12" />
-    <PackageVersion Include="runtime.linux-x64.Microsoft.NETCore.ILAsm" Version="10.0.12" />
-    <PackageVersion Include="runtime.win-x64.Microsoft.NETCore.ILAsm" Version="10.0.12" />
-    <PackageVersion Include="runtime.linux-x64.Microsoft.NETCore.ILDAsm" Version="10.0.12" />
-    <PackageVersion Include="runtime.win-x64.Microsoft.NETCore.ILDAsm" Version="10.0.12" />
+    <PackageVersion Include="System.Reflection.MetadataLoadContext" Version="10.0.15" />
+    <PackageVersion Include="runtime.linux-x64.Microsoft.NETCore.ILAsm" Version="11.0.0" />
+    <PackageVersion Include="runtime.win-x64.Microsoft.NETCore.ILAsm" Version="11.0.0" />
+    <PackageVersion Include="runtime.linux-x64.Microsoft.NETCore.ILDAsm" Version="11.0.0" />
+    <PackageVersion Include="runtime.win-x64.Microsoft.NETCore.ILDAsm" Version="11.0.0" />
 
     <!-- unit test dependencies -->
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.0" />
-    <PackageVersion Include="MSTest.TestAdapter" Version="4.4.0" />
-    <PackageVersion Include="MSTest.TestFramework" Version="4.4.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
+    <PackageVersion Include="MSTest.TestAdapter" Version="4.5.3" />
+    <PackageVersion Include="MSTest.TestFramework" Version="4.5.3" />
     <PackageVersion Include="FluentAssertions" Version="7.2.2" />
     <PackageVersion Include="NSubstitute" Version="6.2.0" />
 
     <!-- common dependencies -->
-    <PackageVersion Include="System.IO.Abstractions" Version="22.2.0" />
+    <PackageVersion Include="System.IO.Abstractions" Version="23.0.0" />
   </ItemGroup>
 </Project>
