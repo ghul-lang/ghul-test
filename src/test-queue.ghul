@@ -227,7 +227,11 @@ namespace Tester is
 
             let flags = if File.exists(flags_path) then File.read_all_text(flags_path) else "" fi
 
-            if TARGET_VARIANTS.has(path) \/ build_targets? then
+            // A test whose flags name its target is run in place under
+            // build_targets, as it is without them: it is built for that one
+            // target either way, and a copy would move it away from files it
+            // names relative to itself.
+            if TARGET_VARIANTS.has(path) \/ (build_targets? /\ !TEST.named_target_name(flags)?) then
                 let problem: string? mut = null
 
                 let targets = variant_targets(path, flags, problem ref)
@@ -383,8 +387,7 @@ namespace Tester is
 
         // The targets the test at `path` is built for, one variant each: the
         // ones its `targets` file names, or else the configuration's
-        // `build_targets`, narrowed to the one its flags name where they
-        // name one. Null, with the reason in `problem`, where the `targets`
+        // `build_targets`. Null, with the reason in `problem`, where the `targets`
         // file cannot be used.
         variant_targets(path: string, flags: string, problem: string? ref) -> Collections.List[string]? is
             problem! = null
@@ -401,10 +404,6 @@ namespace Tester is
                 fi
 
                 return named
-            fi
-
-            if let named = TEST.named_target_name(flags) then
-                return [named]
             fi
 
             return build_targets
