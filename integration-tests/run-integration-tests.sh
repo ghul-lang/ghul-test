@@ -1131,6 +1131,13 @@ if ! grep -q "pass: ../build-targets/hello\[dotnet\]" actual-output || ! grep -q
     exit 1
 fi
 
+expect_configuration_pass "build targets, a test naming its target run in place" --config build-targets ../build-targets-named
+
+if ! grep -q "pass: ../build-targets-named/hello$" actual-output ; then
+    echo integration-tests/configurations: build targets made a variant of a test that names its target
+    exit 1
+fi
+
 expect_configuration_pass "build targets, a targets file winning" --config build-targets ../targets-file
 
 if ! grep -q "its targets file wins over build_targets, so it is not built for wasm" actual-output ; then
