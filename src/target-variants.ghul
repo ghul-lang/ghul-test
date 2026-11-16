@@ -9,7 +9,7 @@ namespace Tester is
     use Ghul.Pipes
 
     /// A test that carries a `targets` file runs once per target it names,
-    /// each run in a directory of its own under `.targets/<target>/`. The
+    /// each run in a directory of its own, `.targets/<target>/<test>/`. The
     /// directory holds copies of the test's sources and inputs, and its
     /// expectations resolved for that target: `run.wasm.expected` becomes
     /// that variant's `run.expected`, and a file naming another target is
@@ -28,6 +28,17 @@ namespace Tester is
             let full = Path.get_full_path(path).trim_end(Path.directory_separator_char)
 
             return Path.join([Path.get_directory_name(full) ?? full, "{DIRECTORY}-{Path.get_file_name(full)}-{target}"])
+        si
+
+        /// The directory inside the test at `path` that its `target` variant
+        /// runs in: `.targets/<target>/<test>/`. The last part is the test
+        /// directory's own name, so a name the compiler derives from the
+        /// directory a source sits in is the same in the variant as in the
+        /// test.
+        inside_directory(path: string, target: string) -> string static is
+            let full = Path.get_full_path(path).trim_end(Path.directory_separator_char)
+
+            return Path.join([path, DIRECTORY, target, Path.get_file_name(full)])
         si
 
         /// Whether the test at `path` carries a `targets` file.
@@ -82,7 +93,7 @@ namespace Tester is
         /// - target: the target the variant is built for
         /// - beside: whether to place the variant beside the test
         materialize(path: string, target: string, beside: bool) -> string static is
-            let directory = if beside then beside_directory(path, target) else Path.join([path, DIRECTORY, target]) fi
+            let directory = if beside then beside_directory(path, target) else inside_directory(path, target) fi
 
             if Directory.exists(directory) then
                 Directory.delete(directory, true)

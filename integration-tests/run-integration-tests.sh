@@ -978,7 +978,7 @@ echo integration-tests/project-shared: PASS
 echo integration-tests/targets-file...
 
 # A test carrying a `targets` file runs once per target it names, in a
-# directory of its own under `.targets/<target>/`, with that target's
+# directory of its own, `.targets/<target>/<test>/`, with that target's
 # expectation standing in for the plain one: `run.dotnet.expected` is what the
 # variant is held to, and the `run.expected` beside it says something else.
 TEST_PROCESSES=1 $RUNNER integration-tests/targets-file | tee actual-output
@@ -995,13 +995,28 @@ if ! diff integration-tests/targets-file/expected-output actual-output ; then
     exit 1
 fi
 
-if [ ! -f integration-tests/targets-file/hello/.targets/dotnet/run.expected ] ; then
+if [ ! -f integration-tests/targets-file/hello/.targets/dotnet/hello/run.expected ] ; then
     echo integration-tests/targets-file did not resolve the expectation into the variant directory
 
     exit 1
 fi
 
 echo integration-tests/targets-file: PASS
+
+echo integration-tests/targets-file-namespace...
+
+# A variant's directory is named after the test, so a name the compiler takes
+# from the directory a source sits in, such as a type's namespace, is the
+# same in the variant as in the test.
+TEST_PROCESSES=1 $RUNNER integration-tests/targets-file-namespace | tee actual-output
+
+if [ "${PIPESTATUS[0]}" != "0" ] || ! grep -q "pass: integration-tests/targets-file-namespace/named-after-directory\[dotnet\]" actual-output ; then
+    echo integration-tests/targets-file-namespace did not name the variant directory after the test
+
+    exit 1
+fi
+
+echo integration-tests/targets-file-namespace: PASS
 
 echo integration-tests/targets-file-unknown...
 
