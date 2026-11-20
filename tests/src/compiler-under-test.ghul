@@ -1,6 +1,6 @@
 namespace Tests is
-    use System.Exception
-    use System.Reflection.Assembly
+    use Ghul.Exception
+    use Ghul.Reflection.Assembly
 
     use IO.Path
 

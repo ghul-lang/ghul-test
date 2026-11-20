@@ -1,7 +1,7 @@
 namespace Tester is
-    use System.Exception
+    use Ghul.Exception
     use System.Convert
-    use System.Text.StringBuilder
+    use Text.StringBuilder
 
     use Collections.Iterable
     use Ghul.Pipes
@@ -22,8 +22,8 @@ namespace Tester is
     use System.Diagnostics.Process
     use System.Diagnostics.ProcessStartInfo
 
-    use System.Text.RegularExpressions.Regex
-    use System.Text.RegularExpressions.RegexOptions
+    use Text.Regex
+    use Text.RegexOptions
 
     class RUNNER(
         host_cli: string private,
@@ -699,7 +699,7 @@ namespace Tester is
         // joined under a header naming each, so the snapshot says which
         // file it is looking at.
         write_formatted_snapshot(copies: Collections.List[string]) is
-            let result = System.Text.StringBuilder()
+            let result = Text.StringBuilder()
             let several = copies.count > 1
 
             for copy in copies do
@@ -1191,7 +1191,7 @@ namespace Tester is
                 return
             fi
 
-            let builder = System.Text.StringBuilder()
+            let builder = Text.StringBuilder()
 
             for line in read_all_text(in_file).split(['\n']) do
                 if line.starts_with("Build FAILED") \/ line.starts_with("Build succeeded") then
@@ -1499,7 +1499,7 @@ namespace Tester is
         si
 
         now_ms() -> long static =>
-            System.DateTimeOffset.utc_now.to_unix_time_milliseconds()
+            Time.DateTimeOffset.utc_now.to_unix_time_milliseconds()
 
         // All of standard output, read as it arrives so the moment the first
         // of it appeared can be recorded: a program that prints and then works

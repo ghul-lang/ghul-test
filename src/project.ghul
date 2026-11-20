@@ -108,7 +108,7 @@ namespace Tester is
                 options.allow_trailing_commas = true
 
                 return JsonDocument.parse(File.read_all_text(Path.join([path, MANIFEST])), options)
-            catch ex: System.Exception
+            catch ex: Ghul.Exception
                 problem! = "{MANIFEST} cannot be read: {ex.message}"
                 return null
             yrt

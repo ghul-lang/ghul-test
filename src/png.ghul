@@ -1,5 +1,5 @@
 namespace Tester is
-    use System.Exception
+    use Ghul.Exception
     use Collections.LIST
     use Ghul.Pipes
     use IO.File

@@ -17,9 +17,9 @@ namespace Tests is
         init() is si
 
         get_private_instance_field(from: object, name: string) -> object? is
-            let non_public = cast int(System.Reflection.BindingFlags.NON_PUBLIC)
-            let instance = cast int(System.Reflection.BindingFlags.INSTANCE)
-            let binding_flags = cast System.Reflection.BindingFlags(non_public + instance)
+            let non_public = cast int(Ghul.Reflection.BindingFlags.NON_PUBLIC)
+            let instance = cast int(Ghul.Reflection.BindingFlags.INSTANCE)
+            let binding_flags = cast Ghul.Reflection.BindingFlags(non_public + instance)
 
             let `field =
                 from.get_type().get_field(
@@ -31,9 +31,9 @@ namespace Tests is
         si
 
         set_private_instance_field(from: object, name: string, value: object) is
-            let non_public = cast int(System.Reflection.BindingFlags.NON_PUBLIC)
-            let instance = cast int(System.Reflection.BindingFlags.INSTANCE)
-            let binding_flags = cast System.Reflection.BindingFlags(non_public + instance)
+            let non_public = cast int(Ghul.Reflection.BindingFlags.NON_PUBLIC)
+            let instance = cast int(Ghul.Reflection.BindingFlags.INSTANCE)
+            let binding_flags = cast Ghul.Reflection.BindingFlags(non_public + instance)
 
             let `field =
                 from.get_type().get_field(
@@ -45,9 +45,9 @@ namespace Tests is
         si
 
         get_private_static_field(from: object, name: string) -> object? is
-            let non_public = cast int(System.Reflection.BindingFlags.NON_PUBLIC)
-            let instance = cast int(System.Reflection.BindingFlags.STATIC)
-            let binding_flags = cast System.Reflection.BindingFlags(non_public + instance)
+            let non_public = cast int(Ghul.Reflection.BindingFlags.NON_PUBLIC)
+            let instance = cast int(Ghul.Reflection.BindingFlags.STATIC)
+            let binding_flags = cast Ghul.Reflection.BindingFlags(non_public + instance)
 
             let `field =
                 from.get_type().get_field(

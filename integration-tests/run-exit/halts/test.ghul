@@ -5,5 +5,5 @@ use IO.Std;
 entry() is
     Std.write_line("about to fail");
 
-    throw System.Exception("catching fire");
+    throw Ghul.Exception("catching fire");
 si

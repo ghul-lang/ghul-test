@@ -28,7 +28,7 @@ namespace Tester is
                 let trimmed = command.trim()
 
                 if !File.exists(trimmed) then
-                    throw System.Exception("disassembler not found: {trimmed}")
+                    throw Ghul.Exception("disassembler not found: {trimmed}")
                 fi
 
                 // Resolved here, because it is checked against this
@@ -86,14 +86,14 @@ namespace Tester is
                 if mode != wanted then
                     File.set_unix_file_mode(path, cast IO.UnixFileMode(wanted))
                 fi
-            catch ex: System.Exception
+            catch ex: Ghul.Exception
                 // An install directory that cannot be written to leaves
                 // the launch to fail and report itself.
             yrt
         si
 
         _beside_tool() -> string? static is
-            let assembly = System.Reflection.Assembly.get_executing_assembly()
+            let assembly = Ghul.Reflection.Assembly.get_executing_assembly()
 
             let location = assembly.location
 
