@@ -1,5 +1,5 @@
 namespace Tester is
-    use System.Exception
+    use Ghul.Exception
 
     // One part of a run split across several processes.
     //

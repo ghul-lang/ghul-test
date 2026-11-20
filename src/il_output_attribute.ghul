@@ -1,7 +1,7 @@
 namespace Tester is
-    use System.BitConverter
+    use Ghul.Math.BitConverter
     use System.Convert
-    use System.Text.Encoding
+    use Text.Encoding
 
     use System.Reflection.Metadata.EntityHandle
     use System.Reflection.Metadata.HandleKind

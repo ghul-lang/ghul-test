@@ -1,5 +1,5 @@
 namespace Tests is
-    use System.Exception
+    use Ghul.Exception
 
     use IO.Directory
     use IO.File

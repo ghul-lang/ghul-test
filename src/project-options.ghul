@@ -12,7 +12,7 @@ namespace Tester is
         // Every `GhulOptions` value in the project files in `path`, joined
         // by spaces; empty where there are none.
         read(path: string) -> string static is
-            let result = System.Text.StringBuilder()
+            let result = Text.StringBuilder()
 
             for project in Directory.get_files(path, "*.ghulproj") do
                 result.append(" ").append(options_in(File.read_all_text(project)))
@@ -25,7 +25,7 @@ namespace Tester is
         // spaces: the text of a `GhulOptions` property, and the `Include` of
         // a `GhulOptions` item. Empty for a file that is not well-formed.
         options_in(project: string) -> string static is
-            let result = System.Text.StringBuilder()
+            let result = Text.StringBuilder()
 
             try
                 for element in XDocument.parse(project).descendants() do

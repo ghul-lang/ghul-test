@@ -1,5 +1,5 @@
 namespace Tester is
-    use System.Exception
+    use Ghul.Exception
     use IO.File
     use IO.Path
     use IO.Directory
@@ -155,7 +155,7 @@ namespace Tester is
         // same, so its diagnostics read as `dotnet build` would have written
         // them.
         name_the_project(log: string, project: string) is
-            let diagnostic = System.Text.RegularExpressions.Regex("^.*\\([0-9]+,[0-9]+(,[0-9]+,[0-9]+)?\\): (error|warning|info|message)( [a-z0-9-]+)?: ")
+            let diagnostic = Text.Regex("^.*\\([0-9]+,[0-9]+(,[0-9]+,[0-9]+)?\\): (error|warning|info|message)( [a-z0-9-]+)?: ")
 
             let lines =
                 File.read_all_lines(log)
@@ -539,7 +539,7 @@ namespace Tester is
             Path.join(_publish, file_name)
 
         get_ghul_test_runtime_path() -> string is
-            let executing_assembly = System.Reflection.Assembly.get_executing_assembly()
+            let executing_assembly = Ghul.Reflection.Assembly.get_executing_assembly()
 
             let assembly_path = Path.get_full_path(executing_assembly.location)
 
@@ -587,7 +587,7 @@ namespace Tester is
         // runtime we roll forward onto, so an ecosystem-wide bump needs no
         // change here.
         get_target_framework() -> string is
-            let assembly = System.Reflection.Assembly.get_executing_assembly()
+            let assembly = Ghul.Reflection.Assembly.get_executing_assembly()
             let assembly_path = Path.get_full_path(assembly.location)
             let directory = Path.get_directory_name(assembly_path)
             let name = Path.get_file_name_without_extension(assembly_path)

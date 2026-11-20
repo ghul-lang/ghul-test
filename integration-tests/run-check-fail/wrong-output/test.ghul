@@ -3,7 +3,7 @@ use IO.Std
 // Prints a different number every run, so nothing it writes can be held to
 // a snapshot. What is always true is the shape, which run.check asserts.
 entry() is
-    let source = System.Random()
+    let source = Ghul.Random()
 
     for _ in 0..3 do
         Std.write_line("value {source.next(1000)}")

@@ -1,5 +1,5 @@
 namespace Tester is
-    use System.Text.StringBuilder
+    use Text.StringBuilder
 
     use IO.Std
 
@@ -30,17 +30,17 @@ namespace Tester is
         progress_string: string => "{progress.to_string().pad_left(2)}%"
 
         is_pass: bool is
-            throw System.NotImplementedException()
+            throw Ghul.NotImplementedException()
         si
 
         is_fail: bool is
-            throw System.NotImplementedException()
+            throw Ghul.NotImplementedException()
         si
 
         is_executed: bool => is_pass \/ is_fail
 
         head: string is
-            throw System.NotImplementedException()
+            throw Ghul.NotImplementedException()
         si
 
         body: string? => null

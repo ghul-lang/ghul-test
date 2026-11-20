@@ -1,5 +1,5 @@
 namespace Tester is
-    use System.Exception
+    use Ghul.Exception
 
     use Collections.Iterable
     use Ghul.Pipes
@@ -139,7 +139,7 @@ namespace Tester is
         si
 
         now() -> long static =>
-            System.DateTimeOffset.utc_now.to_unix_time_milliseconds()
+            Time.DateTimeOffset.utc_now.to_unix_time_milliseconds()
 
         on_discovered(total: int) is
             _record.total = total

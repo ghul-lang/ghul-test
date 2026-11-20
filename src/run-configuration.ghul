@@ -1,5 +1,5 @@
 namespace Tester is
-    use System.Exception
+    use Ghul.Exception
 
     use IO.Directory
     use IO.DirectoryInfo
@@ -774,9 +774,9 @@ namespace Tester is
             fi
 
             let pattern =
-                System.Text.RegularExpressions.Regex(
-                    "<Package(?:Version|Reference)\\s+Include=\"{System.Text.RegularExpressions.Regex.escape(package)}\"\\s+Version=\"([^\"]+)\"",
-                    System.Text.RegularExpressions.RegexOptions.IGNORE_CASE)
+                Text.Regex(
+                    "<Package(?:Version|Reference)\\s+Include=\"{Text.Regex.escape(package)}\"\\s+Version=\"([^\"]+)\"",
+                    Text.RegexOptions.IGNORE_CASE)
 
             let found = pattern.match(File.read_all_text(file))
 
