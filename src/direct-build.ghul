@@ -194,6 +194,7 @@ namespace Tester is
             let settings = _SETTINGS()
 
             settings.known_packages = if target? then known_packages else null fi
+            settings.for_another_target = target?
 
             if let text = props then
                 if !_read_file(text, true, settings, problem) then
@@ -357,7 +358,7 @@ namespace Tester is
                 return false
             fi
 
-            if _is_ignored_property(name) then
+            if _is_ignored_property(name) \/ (settings.for_another_target /\ _is_dotnet_only_property(name, value)) then
                 return true
             fi
 
@@ -407,6 +408,15 @@ namespace Tester is
             name =~ "RunWorkingDirectory" \/
             name =~ "ManagePackageVersionsCentrally" \/
             name =~ "NoWarn"
+
+        // Properties that only the .NET runtime or NuGet packing reads, so a
+        // build for another target is the same with or without them: a
+        // runtime tuning switch, the package's name, and the invariant
+        // culture, which every target other than dotnet always has.
+        _is_dotnet_only_property(name: string, value: string) -> bool static =>
+            name =~ "TieredCompilation" \/
+            name =~ "PackageId" \/
+            (name =~ "InvariantGlobalization" /\ value.to_lower_invariant() =~ "true")
 
         _read_item(item: XElement, settings: _SETTINGS, problem: string? ref) -> bool static is
             let name = item.name.local_name
@@ -517,6 +527,7 @@ namespace Tester is
     // What the project files say, accumulated across them in the order
     // MSBuild evaluates them.
     class _SETTINGS is
+        for_another_target: bool public
         output_type: string? public
         target_framework: string? public
         compiler: string? public
