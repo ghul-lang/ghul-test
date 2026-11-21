@@ -113,6 +113,33 @@ namespace Tests is
             DIRECT_BUILD.from_text(project, _props, null, "net10.0", target, Collections.SET[string](["ghul.raster"]), problem)
 
         @Test()
+        from_text__for_another_target__ignores_properties_only_dotnet_reads() is
+            let problem: string? mut = null
+
+            let build =
+                _build_for(
+                    "wasm",
+                    _task("<TieredCompilation>false</TieredCompilation><PackageId>a-library</PackageId><InvariantGlobalization>true</InvariantGlobalization>", ""),
+                    problem ref)
+
+            should(build?).be_true("{problem}", [])
+        si
+
+        @Test()
+        from_text__for_dotnet__still_needs_msbuild_for_a_property_only_dotnet_reads() is
+            should(_problem(_task("<TieredCompilation>false</TieredCompilation>", ""))).be("property TieredCompilation", "", [])
+        si
+
+        @Test()
+        from_text__for_another_target__needs_msbuild_for_a_culture_sensitive_build() is
+            let problem: string? mut = null
+
+            _build_for("wasm", _task("<InvariantGlobalization>false</InvariantGlobalization>", ""), problem ref)
+
+            should(problem ?? "").be("property InvariantGlobalization", "", [])
+        si
+
+        @Test()
         from_text__for_another_target__leaves_out_the_target_framework() is
             let problem: string? mut = null
 

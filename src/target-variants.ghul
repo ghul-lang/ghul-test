@@ -192,7 +192,6 @@ namespace Tester is
             name =~ "ghul-runtime.dll" \/
             name =~ "out.il" \/
             name.starts_with("binary.") \/
-            name.starts_with("formatted") \/
             ARTIFACT_EXTENSIONS |> any(extension => name.ends_with(extension)))
 
         ARTIFACT_EXTENSIONS: ARRAY[string] static =>

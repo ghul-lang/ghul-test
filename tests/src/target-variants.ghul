@@ -20,5 +20,19 @@ namespace Tests is
             should(TARGET_VARIANTS.is_artifact("binary.mjs")).be_true("", [])
             should(TARGET_VARIANTS.is_artifact("other.mjs")).be_true("", [])
         si
+
+        @Test()
+        is_artifact__a_source_named_formatted_something__is_an_input() is
+            should(TARGET_VARIANTS.is_artifact("formatted-numeric-output.ghul")).be_false("", [])
+            should(TARGET_VARIANTS.is_artifact("formatted-numeric-output.ghulproj")).be_false("", [])
+        si
+
+        @Test()
+        is_artifact__what_a_format_check_writes__is_an_artifact() is
+            should(TARGET_VARIANTS.is_artifact("formatted-compiler.out")).be_true("", [])
+            should(TARGET_VARIANTS.is_artifact("formatted-run.exit")).be_true("", [])
+            should(TARGET_VARIANTS.is_artifact("formatted.wasm")).be_true("", [])
+            should(TARGET_VARIANTS.is_artifact("formatted.exe")).be_true("", [])
+        si
     si
 si
