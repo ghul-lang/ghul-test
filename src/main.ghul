@@ -18,8 +18,13 @@ namespace Tester is
             Std.output_encoding = UTF8_ENCODING()
 
             if arguments.count == 0 then
-                Std.write_line("usage: ghul-test [--config <name>] [--compiler <command>] [--tag <name>]... [--not-tag <name>]... [--shard <index>/<count>] <test-folder>...")
+                Std.write_line("usage: ghul-test [--config <name>] [--compiler <command>] [--tag <name>]... [--not-tag <name>]... [--shard <index>/<count> [--shard-record <file>]] <test-folder>...")
+                Std.write_line("       ghul-test --check-shards <file>...")
                 return 1
+            fi
+
+            if arguments[0] =~ "--check-shards" then
+                return check_shards(arguments |> Ghul.Pipes.skip(1) |> LIST())
             fi
 
             // The program a .NET test's binary runs under.
@@ -35,6 +40,7 @@ namespace Tester is
             let target_flags = Collections.MAP[string, string]()
 
             let shard_spec: string? mut
+            let shard_record_path: string? mut = null
 
             let configuration_name: string? mut = null
 
@@ -74,6 +80,15 @@ namespace Tester is
                     fi
 
                     shard_spec = arguments[i]
+                elif arg =~ "--shard-record" then
+                    i = i + 1
+
+                    if i >= arguments.count then
+                        Std.write_line("--shard-record requires a file argument")
+                        return 1
+                    fi
+
+                    shard_record_path = arguments[i]
                 elif arg =~ "--tag" then
                     i = i + 1
 
@@ -273,7 +288,13 @@ namespace Tester is
             else
                 Std.write_line(
                     "{queue.count} of {queue.candidate_count} tests discovered "
-                    "for {shard.description}")
+                    "for {shard.description}, assignment {queue.assignment_digest}")
+            fi
+
+            if let record_path = shard_record_path then
+                let record = SHARD_RECORD(shard.index, shard.count, queue.candidate_count, queue.assigned_count, queue.assignment_digest)
+
+                File.write_all_text(record_path, "{record.text}\n")
             fi
             Std.write_line("{queue.executed_count} tests enabled")
 
@@ -336,6 +357,41 @@ namespace Tester is
             fi
 
             throw Exception("unknown CLI environment: {name}")
+        si
+        // Checks the records the shards of one run wrote with --shard-record.
+        check_shards(paths: Collections.List[string]) -> int static is
+            let records = LIST[SHARD_RECORD]()
+            let problems = LIST[string]()
+
+            for path in paths do
+                let problem: string? mut = null
+
+                if !File.exists(path) then
+                    problems.add("{path}: no such file")
+                elif let record = SHARD_RECORD.parse(File.read_all_text(path), path, problem ref) then
+                    records.add(record)
+                else
+                    problems.add(problem ?? path)
+                fi
+            od
+
+            if problems.count == 0 then
+                problems.add_range(SHARD_RECORD.check(records))
+            fi
+
+            for problem in problems do
+                Std.write_line(problem)
+            od
+
+            if problems.count > 0 then
+                return 1
+            fi
+
+            let first = records[0]
+
+            Std.write_line("{first.count} shards ran each of {first.candidates} candidates once, assignment {first.digest}")
+
+            return 0
         si
     si
 si

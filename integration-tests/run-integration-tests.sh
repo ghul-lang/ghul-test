@@ -317,6 +317,12 @@ if ! grep -q "not run: integration-tests/undiscovered/no-flags looks like a test
     exit 1
 fi
 
+if ! grep -q "not run: integration-tests/undiscovered/bad-weight: .*weight must be a whole number of at least 1" actual-output ; then
+    echo integration-tests/undiscovered did not report the test whose weight is 0
+
+    exit 1
+fi
+
 if grep -q "not run: .*support" actual-output ; then
     echo integration-tests/undiscovered reported a directory that is not a test
 
@@ -330,6 +336,62 @@ if ! grep -q "1/1 tests passed" actual-output ; then
 fi
 
 echo integration-tests/undiscovered: PASS
+
+
+echo integration-tests/sharding...
+
+# Three shards of one run, each recording what it took, together run every
+# test once; c's weight of 5 leaves its shard with nothing else.
+rm -f shard-*.record
+
+for index in 1 2 3; do
+    TEST_PROCESSES=1 $RUNNER --shard $index/3 --shard-record shard-$index.record integration-tests/sharding > shard-$index.output
+
+    if [ $? != 0 ]; then
+        cat shard-$index.output
+        echo integration-tests/sharding: shard $index of 3 failed
+
+        exit 1
+    fi
+done
+
+if ! grep -q "pass: integration-tests/sharding/c$" shard-1.output || [ "$(grep -c "pass:" shard-1.output)" != 1 ]; then
+    cat shard-1.output
+    echo integration-tests/sharding: the heaviest test did not have shard 1 to itself
+
+    exit 1
+fi
+
+if [ "$(cat shard-*.output | grep -c "pass:")" != 7 ] || [ "$(cat shard-*.output | grep "pass:" | sort -u | wc -l)" != 7 ]; then
+    cat shard-*.output
+    echo integration-tests/sharding: the shards did not run each of the 7 tests once
+
+    exit 1
+fi
+
+if ! $RUNNER --check-shards shard-1.record shard-2.record shard-3.record | tee actual-output | grep -q "3 shards ran each of 7 candidates once" ; then
+    cat actual-output
+    echo integration-tests/sharding: the records of a complete run did not check
+
+    exit 1
+fi
+
+if $RUNNER --check-shards shard-1.record shard-3.record > actual-output ; then
+    echo integration-tests/sharding: the records of a run missing a shard checked
+
+    exit 1
+fi
+
+if ! grep -q "no record for shard 2 of 3" actual-output ; then
+    cat actual-output
+    echo integration-tests/sharding: a missing shard was not reported
+
+    exit 1
+fi
+
+rm -f shard-*.record shard-*.output
+
+echo integration-tests/sharding: PASS
 
 echo integration-tests/il-expected...
 

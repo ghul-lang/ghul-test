@@ -77,9 +77,19 @@ namespace Tester is
         _covers(target: TestTarget) -> bool =>
             if let targets = run_targets then targets |> any(t => t == target) else true fi
 
-        // Counts every test that survives the tag filter, so a shard
-        // selects the same tests however the run is divided.
-        _candidate_ordinal: int
+        // Every test that survives the tag filter, in discovery order, with
+        // what queues it. A shard queues the ones the assignment gives it
+        // once discovery is done, so every shard divides the same list.
+        _candidates: LIST[(name: string, weight: int, queue: () -> void)]
+
+        _candidate_ordinal: int => _candidates.count
+
+        /// How many of the candidates this shard was given.
+        assigned_count: int
+
+        /// A digest of how the run's tests are divided between its shards,
+        /// the same in every shard that saw the same tests.
+        assignment_digest: string
 
         progress: int
         count: int => _tests.count
@@ -118,13 +128,33 @@ namespace Tester is
             Std.write_line("using {actual_test_processes} processes to run tests")
 
             _tests = LIST[TEST]()
+            _candidates = LIST[(name: string, weight: int, queue: () -> void)]()
+            assignment_digest = ""
             _undiscovered = LIST[string]()
             _passed_over_reasons = LIST[string]()
             _package_flags = Collections.MAP[string, Collections.MAP[string, string]]()
             target_loaders = Collections.MAP[string, string]()
         si
 
+        // Queues the candidates the assignment gives this shard.
+        queue_assigned() is
+            let names = _candidates |> map(c => c.name) |> LIST()
+            let weights = _candidates |> map(c => c.weight) |> LIST()
+            let shards = SHARD.assign(weights, _shard.count)
+
+            assignment_digest = SHARD.digest(names, weights, shards)
+
+            for i in 0.._candidates.count do
+                if shards[i] == _shard.index then
+                    assigned_count = assigned_count + 1
+                    _candidates[i].queue()
+                fi
+            od
+        si
+
         run_queued_tests() is
+            queue_assigned()
+
             _progress_reporter.on_discovered(count)
 
             report_missing_disassembler()
@@ -283,13 +313,9 @@ namespace Tester is
                     return
                 fi
 
-                let variant_ordinal = _candidate_ordinal
+                let assigned_targets = targets
 
-                _candidate_ordinal = _candidate_ordinal + 1
-
-                if _shard.matches(variant_ordinal) then
-                    queue_variants(path, flags, tags, targets, settings)
-                fi
+                _candidates.add((path, own?.weight ?? 1, () => queue_variants(path, flags, tags, assigned_targets, settings)))
 
                 return
             fi
@@ -308,14 +334,10 @@ namespace Tester is
                 return
             fi
 
-            let ordinal = _candidate_ordinal
+            _candidates.add((path, own?.weight ?? 1, () => queue_single(path, flags, tags, settings, project)))
+        si
 
-            _candidate_ordinal = _candidate_ordinal + 1
-
-            if !_shard.matches(ordinal) then
-                return
-            fi
-
+        queue_single(path: string, flags: string, tags: Iterable[string], settings: TEST_SETTINGS, project: PROJECT?) is
             let source_files = get_source_files(path)
             let is_build_failure_expected = File.exists("{path}/fail.expected")
 

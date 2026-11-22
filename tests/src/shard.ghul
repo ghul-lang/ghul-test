@@ -14,53 +14,183 @@ namespace Tests is
 
         init() is si
 
+        // Weights 1 to 40 drawn from a fixed sequence, mostly 1 with a few
+        // heavy ones, as a suite with a handful of slow tests has.
+        weights_for(seed: int, length: int) -> LIST[int] static is
+            let result = LIST[int]()
+            let state mut = seed
+
+            for _ in 0..length do
+                state = (state * 1103515245 + 12345) & 0x7FFF_FFFF
+
+                let roll = state % 100
+
+                result.add(if roll < 80 then 1 elif roll < 95 then 2 + roll % 5 else 10 + roll % 31 fi)
+            od
+
+            return result
+        si
+
         @Test()
-        SHARD__whole__matches_every_ordinal() is
+        SHARD__assign__gives_every_candidate_exactly_one_shard_in_range() is
 
-            let shard = SHARD.whole()
+            for count in 1::8 do
+                for seed in 1::12 do
+                    for length in [0, 1, 7, 64, 333] do
+                        let weights = weights_for(seed, length)
+                        let shards = SHARD.assign(weights, count)
 
-            should(shard.is_whole).be_true("", [])
+                        should(shards.count).be(length, "", [])
 
-            for ordinal in 0..20 do
-                should(shard.matches(ordinal)).be_true("", [])
+                        for shard in shards do
+                            should(shard >= 1 /\ shard <= count).be_true("", [])
+                        od
+                    od
+                od
             od
         si
 
         @Test()
-        SHARD__matches__assigns_each_ordinal_to_exactly_one_shard() is
+        SHARD__assign__the_shards_together_run_each_candidate_once() is
+
+            for count in 1::8 do
+                for seed in 1::12 do
+                    let weights = weights_for(seed, 200)
+                    let shards = SHARD.assign(weights, count)
+                    let seen = repeat(0, weights.count) |> LIST()
+
+                    for index in 1::count do
+                        for candidate in 0..weights.count do
+                            if shards[candidate] == index then
+                                seen[candidate] = seen[candidate] + 1
+                            fi
+                        od
+                    od
+
+                    for times in seen do
+                        should(times).be(1, "", [])
+                    od
+                od
+            od
+        si
+
+        @Test()
+        SHARD__assign__is_the_same_every_time() is
+
+            let weights = weights_for(7, 500)
+
+            should(SHARD.assign(weights, 5) |> join(",")).be(SHARD.assign(LIST[int](weights), 5) |> join(","), "", [])
+        si
+
+        @Test()
+        SHARD__assign__with_every_weight_one__stripes_in_order() is
 
             let count = 6
+            let shards = SHARD.assign(repeat(1, 1000) |> LIST(), count)
 
-            for ordinal in 0..1000 do
-                let matched mut = 0
-
-                for index in 1::count do
-                    if SHARD(index, count).matches(ordinal) then
-                        matched = matched + 1
-                    fi
-                od
-
-                should(matched).be(1, "", [])
+            for candidate in 0..1000 do
+                should(shards[candidate]).be(candidate % count + 1, "", [])
             od
         si
 
         @Test()
-        SHARD__matches__divides_the_ordinals_evenly() is
+        SHARD__assign__puts_the_heaviest_candidates_on_different_shards() is
 
-            let count = 4
-            let total = 1000
+            let weights = repeat(1, 100) |> LIST()
 
-            for index in 1::count do
-                let shard = SHARD(index, count)
-                let taken mut = 0
+            weights[30] = 60
+            weights[31] = 60
 
-                for ordinal in 0..total do
-                    if shard.matches(ordinal) then
-                        taken = taken + 1
-                    fi
+            let shards = SHARD.assign(weights, 5)
+
+            should(shards[30] != shards[31]).be_true("", [])
+        si
+
+        @Test()
+        SHARD__assign__leaves_no_shard_heavier_than_the_lightest_plus_the_heaviest_weight() is
+
+            for count in 1::8 do
+                for seed in 1::12 do
+                    let weights = weights_for(seed, 300)
+                    let shards = SHARD.assign(weights, count)
+                    let loads = repeat(0, count) |> LIST()
+
+                    for candidate in 0..weights.count do
+                        loads[shards[candidate] - 1] = loads[shards[candidate] - 1] + weights[candidate]
+                    od
+
+                    let heaviest = (weights |> max())!
+                    let spread = (loads |> max())! - (loads |> min())!
+
+                    should(spread <= heaviest).be_true("", [])
                 od
+            od
+        si
 
-                should(taken).be(total / count, "", [])
+        @Test()
+        SHARD__digest__differs_when_a_name_a_weight_or_a_shard_differs() is
+
+            let names = LIST[string](["a", "b", "c"])
+            let weights = LIST[int]([1, 2, 1])
+            let shards = LIST[int]([1, 2, 1])
+
+            let digest = SHARD.digest(names, weights, shards)
+
+            should(SHARD.digest(names, weights, shards)).be(digest, "", [])
+            should(SHARD.digest(LIST[string](["a", "b", "d"]), weights, shards) =~ digest).be_false("", [])
+            should(SHARD.digest(names, LIST[int]([1, 3, 1]), shards) =~ digest).be_false("", [])
+            should(SHARD.digest(names, weights, LIST[int]([2, 2, 1])) =~ digest).be_false("", [])
+            should(SHARD.digest(LIST[string](["ab", "", "c"]), weights, shards) =~ SHARD.digest(LIST[string](["a", "b", "c"]), weights, shards)).be_false("", [])
+        si
+
+        records(texts: string[]) -> LIST[SHARD_RECORD] static is
+            let result = LIST[SHARD_RECORD]()
+
+            for text in texts do
+                let problem: string? mut = null
+
+                result.add(SHARD_RECORD.parse(text, "test", problem ref)!)
+            od
+
+            return result
+        si
+
+        @Test()
+        SHARD_RECORD__check__accepts_a_complete_run() is
+
+            should(SHARD_RECORD.check(records(["1 3 10 4 ab", "2 3 10 3 ab", "3 3 10 3 ab"])).count).be(0, "", [])
+        si
+
+        @Test()
+        SHARD_RECORD__check__rejects_a_missing_or_repeated_shard() is
+
+            should(SHARD_RECORD.check(records(["1 3 10 4 ab", "3 3 10 3 ab"])).count > 0).be_true("", [])
+            should(SHARD_RECORD.check(records(["1 3 10 4 ab", "1 3 10 4 ab", "3 3 10 3 ab"])).count > 0).be_true("", [])
+        si
+
+        @Test()
+        SHARD_RECORD__check__rejects_shards_that_disagree() is
+
+            should(SHARD_RECORD.check(records(["1 2 10 5 ab", "2 2 10 5 cd"])).count > 0).be_true("", [])
+            should(SHARD_RECORD.check(records(["1 2 10 5 ab", "2 2 11 5 ab"])).count > 0).be_true("", [])
+            should(SHARD_RECORD.check(records(["1 2 10 5 ab", "2 3 10 5 ab"])).count > 0).be_true("", [])
+        si
+
+        @Test()
+        SHARD_RECORD__check__rejects_counts_that_do_not_add_up() is
+
+            should(SHARD_RECORD.check(records(["1 2 10 5 ab", "2 2 10 4 ab"])).count > 0).be_true("", [])
+            should(SHARD_RECORD.check(records(["1 2 10 6 ab", "2 2 10 5 ab"])).count > 0).be_true("", [])
+        si
+
+        @Test()
+        SHARD_RECORD__parse__rejects_a_malformed_record() is
+
+            for text in ["", "1 2 3 4", "1 2 3 4 ab cd", "x 2 3 4 ab", "1 2 -3 4 ab"] do
+                let problem: string? mut = null
+
+                should(SHARD_RECORD.parse(text, "test", problem ref)?).be_false("", [])
+                should(problem?).be_true("", [])
             od
         si
 
@@ -71,9 +201,8 @@ namespace Tests is
 
             should(shard.is_whole).be_false("", [])
             should(shard.description).be("shard 2 of 6", "", [])
-            should(shard.matches(1)).be_true("", [])
-            should(shard.matches(7)).be_true("", [])
-            should(shard.matches(0)).be_false("", [])
+            should(shard.index).be(2, "", [])
+            should(shard.count).be(6, "", [])
         si
 
         @Test()

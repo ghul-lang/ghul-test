@@ -1,20 +1,87 @@
 namespace Tester is
     use Ghul.Exception
 
+    use Collections.LIST
+
+    use Ghul.Pipes
+
     // One part of a run split across several processes.
     //
-    // Tests are striped by discovery ordinal rather than cut into contiguous
-    // blocks. Discovery walks the tree in sorted order, so a block would put a
-    // whole directory into one shard, and a directory is where tests of a like
-    // cost collect.
+    // Every shard sees the same candidates in the same discovery order, and
+    // computes the same assignment from them, so the shards of a run divide
+    // it with no test left out or run twice.
     class SHARD(index: int private, count: int private) is
         is_whole: bool => _count <= 1
 
         description: string => "shard {_index} of {_count}"
 
-        matches(ordinal: int) -> bool => is_whole \/ ordinal % _count == _index - 1
+        /// The shard, 1 to `count`, this one is.
+        index: int => _index
+
+        /// How many shards the run is divided into.
+        count: int => _count
 
         whole() -> SHARD static => SHARD(1, 1)
+
+        /// The shard, 1 to `count`, each candidate goes to, in the order the
+        /// candidates are given.
+        ///
+        /// The heaviest candidate is placed first, each going to the shard
+        /// with the least weight so far, the lower numbered one where two
+        /// have the same, and candidates of equal weight are placed in their
+        /// given order. Only whole numbers are used, so every shard computes
+        /// the same assignment from the same candidates. With every weight 1
+        /// this stripes the candidates across the shards in their order.
+        ///
+        /// - weights: each candidate's weight, a whole number of at least 1
+        /// - count: how many shards there are, at least 1
+        assign(weights: Collections.List[int], count: int) -> LIST[int] static is
+            let order =
+                0..weights.count
+                    |> map(i => (-weights[i], i))
+                    |> sort()
+
+            let loads = repeat(0L, count) |> LIST()
+            let shards = repeat(0, weights.count) |> LIST()
+
+            for (_, candidate) in order do
+                let lightest mut = 0
+
+                for shard in 1..count do
+                    if loads[shard] < loads[lightest] then
+                        lightest = shard
+                    fi
+                od
+
+                loads[lightest] = loads[lightest] + long(weights[candidate])
+                shards[candidate] = lightest + 1
+            od
+
+            return shards
+        si
+
+        /// A digest of an assignment, 64-bit FNV-1a over each candidate's
+        /// name, weight and shard in the order given, as 16 hex digits.
+        /// Shards that agree on it divided the same candidates the same way.
+        digest(names: Collections.List[string], weights: Collections.List[int], shards: Collections.List[int]) -> string static is
+            let hash mut = 0xcbf2_9ce4_8422_2325`UL
+
+            mix(value: ulong) is
+                hash = (hash ^ value) * 0x100_0000_01b3`UL
+            si
+
+            for i in 0..names.count do
+                for c in names[i] do
+                    mix(ulong(c))
+                od
+
+                mix(0xFFFF`UL)
+                mix(ulong(weights[i]))
+                mix(ulong(shards[i]))
+            od
+
+            return hash.to_string("x16")
+        si
 
         parse(spec: string) -> SHARD static is
             let parts = spec.split(['/'])

@@ -29,6 +29,11 @@ namespace Tester is
         /// the configuration's `build_targets`; null to leave them to it.
         build_targets: LIST[string]? public
 
+        /// How long the test takes beside a typical one, a whole number of
+        /// at least 1, which `--shard` balances the shards by; null for 1.
+        /// Only a test's own `test.json` sets it.
+        weight: int? public
+
         /// Whether the test is only type-checked, with `--type-check`.
         check_only: bool? public
 
@@ -133,6 +138,15 @@ namespace Tester is
                     fi
 
                     flags = value.get_string()
+                elif is_test /\ key =~ "weight" then
+                    let weight: int mut
+
+                    if value.value_kind != JsonValueKind.NUMBER \/ !value.try_get_int32(weight ref) \/ weight < 1 then
+                        problem! = "{where}: weight must be a whole number of at least 1"
+                        return false
+                    fi
+
+                    self.weight = weight
                 elif is_test /\ key =~ "build_targets" then
                     let names = _target_names(value, where, problem)
 

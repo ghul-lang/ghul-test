@@ -1,0 +1,101 @@
+namespace Tester is
+    use Collections.LIST
+
+    use Ghul.Pipes
+
+    /// What one shard of a run took: its place, how many candidates the whole
+    /// run had, how many of them were this shard's, and the digest of the
+    /// assignment. The records of all a run's shards, checked together, show
+    /// whether every candidate ran exactly once.
+    class SHARD_RECORD(
+        index: int public,
+        count: int public,
+        candidates: int public,
+        assigned: int public,
+        digest: string public
+    ) is
+        /// The record as the one line `--shard-record` writes.
+        text: string => "{index} {count} {candidates} {assigned} {digest}"
+
+        /// Reads a record written by `--shard-record`, or null with the reason
+        /// in `problem`.
+        parse(text: string, where: string, problem: string? ref) -> SHARD_RECORD? static is
+            problem! = null
+
+            let words = text.trim().split([' ']) |> filter(w => w.length > 0) |> LIST()
+
+            if words.count != 5 then
+                problem! = "{where}: a shard record is five words: index, count, candidates, assigned and digest"
+                return null
+            fi
+
+            let numbers = LIST[int]()
+
+            for word in words |> take(4) do
+                let value: int mut
+
+                if !int.try_parse(word, value ref) \/ value < 0 then
+                    problem! = "{where}: '{word}' is not a whole number"
+                    return null
+                fi
+
+                numbers.add(value)
+            od
+
+            return SHARD_RECORD(numbers[0], numbers[1], numbers[2], numbers[3], words[4])
+        si
+
+        /// What is wrong with a run's records taken together: empty when
+        /// there is one for each shard, every shard saw the same candidates
+        /// and divided them the same way, and the shards' candidates add up
+        /// to the run's.
+        check(records: Collections.List[SHARD_RECORD]) -> LIST[string] static is
+            let problems = LIST[string]()
+
+            if records.count == 0 then
+                problems.add("no shard records")
+                return problems
+            fi
+
+            let first = records[0]
+
+            for record in records do
+                if record.count != first.count then
+                    problems.add("shard {record.index} was one of {record.count}, shard {first.index} one of {first.count}")
+                fi
+
+                if record.candidates != first.candidates then
+                    problems.add("shard {record.index} saw {record.candidates} candidates, shard {first.index} saw {first.candidates}")
+                fi
+
+                if record.digest !~ first.digest then
+                    problems.add("shard {record.index} has assignment {record.digest}, shard {first.index} has {first.digest}")
+                fi
+            od
+
+            for index in 1::first.count do
+                let found = records |> count(r => r.index == index)
+
+                if found == 0 then
+                    problems.add("no record for shard {index} of {first.count}")
+                elif found > 1 then
+                    problems.add("{found} records for shard {index} of {first.count}")
+                fi
+            od
+
+            for record in records do
+                if record.index < 1 \/ record.index > first.count then
+                    problems.add("a record for shard {record.index} of {first.count}")
+                fi
+            od
+
+            let assigned = records |> map(r => r.assigned) |> sum()
+
+            if problems.count == 0 /\ assigned != first.candidates then
+                problems.add("the shards ran {assigned} candidates of {first.candidates}")
+            fi
+
+            return problems
+        si
+    si
+si
