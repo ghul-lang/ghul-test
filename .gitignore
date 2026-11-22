@@ -36,3 +36,6 @@ publish/
 .targets/
 .targets-*/
 integration-tests/**/out/
+
+# The response file a test hands a fork server.
+integration-tests/**/fork-request.rsp

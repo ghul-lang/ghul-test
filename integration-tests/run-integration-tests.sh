@@ -1265,6 +1265,39 @@ if ! grep -q "^compiler under test: $(pwd)/integration-tests/configurations/reco
     exit 1
 fi
 
+# Three tests sharing their arguments: the first two are built as before and
+# the third by a fork server, started with the arguments they share, handed
+# a response file with the test's sources and output, and the test's
+# directory. The served build fails, so the test is built again as before.
+rm -f integration-tests/configurations/compiler-arguments integration-tests/configurations/fork-server-arguments integration-tests/configurations/fork-requests
+(cd integration-tests/configurations && env -u CI TEST_PROCESSES=1 $CONFIG_RUNNER --config recorded-fork fork-tests 2>&1) > actual-output
+
+if ! grep -q "^fork servers: 1 started, 1 build(s) served from a snapshot, 0 compiled cold$" actual-output ; then
+    cat actual-output
+    echo integration-tests/configurations: recorded-fork did not serve the third build from one fork server
+    exit 1
+fi
+
+if grep -q "test.ghul" integration-tests/configurations/fork-server-arguments || ! grep -qx -- "--target" integration-tests/configurations/fork-server-arguments ; then
+    cat integration-tests/configurations/fork-server-arguments
+    echo integration-tests/configurations: recorded-fork did not start its server with the arguments the tests share
+    exit 1
+fi
+
+if ! grep -qx "directory $(pwd)/integration-tests/configurations/fork-tests/c" integration-tests/configurations/fork-requests || ! grep -qx "test.ghul" integration-tests/configurations/fork-requests || ! grep -qx "binary.wasm" integration-tests/configurations/fork-requests ; then
+    cat integration-tests/configurations/fork-requests
+    echo integration-tests/configurations: recorded-fork did not send the third test its sources, output and directory
+    exit 1
+fi
+
+if ! grep -q "fail: fork-tests/c" actual-output || grep -q "⚠️" actual-output ; then
+    cat actual-output
+    echo integration-tests/configurations: recorded-fork did not fail a test that fails built both ways
+    exit 1
+fi
+
+rm -f integration-tests/configurations/fork-server-arguments integration-tests/configurations/fork-requests
+
 # recorded_loader <test>: runs the recorded-loader configuration on one of
 # its wasm tests, as recorded_arguments does.
 recorded_loader() {

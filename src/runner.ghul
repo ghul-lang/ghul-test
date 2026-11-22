@@ -37,6 +37,13 @@ namespace Tester is
 
         _failure: FAILURE?
 
+        /// Whether this build may go to a fork server: false for the cold
+        /// rebuild of a test that failed when served.
+        may_use_fork_server: bool public
+
+        /// Whether the build that just ran was served by a fork server.
+        was_served: bool public
+
         // How long the test's program took, set where the program is run and
         // carried onto its result so a reporter can say it.
         _program_timing: TIMING?
@@ -67,6 +74,8 @@ namespace Tester is
                 else
                     _test.target()
                 fi
+
+            may_use_fork_server = true
 
             if !_collate_environment? then
                 _collate_environment = MAP[string,string]()
@@ -103,6 +112,28 @@ namespace Tester is
                 fi
 
                 _run_test()
+
+                // Built by a fork server and failed: built again cold. A test
+                // that passes that way passes with a warning, so a difference
+                // between the two builds shows up without failing the run.
+                if let served_failure = _failure /\ was_served then
+                    _failure = null
+                    was_served = false
+                    may_use_fork_server = false
+
+                    _run_test()
+
+                    if !_failure? then
+                        clean_up()
+                        mark_if_failed()
+
+                        let result = SERVED_FAILURE_PASS(_test, served_failure.body ?? served_failure.head)
+
+                        result.timing = _program_timing
+
+                        return result
+                    fi
+                fi
 
                 clean_up()
 
@@ -736,6 +767,7 @@ namespace Tester is
                     "binary.runtimeconfig.json",
                     "compiler.out",
                     "compiler.trim.out",
+                    "fork-request.rsp",
                     "sed.out",
                     "warn.grep",
                     "warn.diff",

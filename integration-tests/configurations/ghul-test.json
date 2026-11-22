@@ -64,6 +64,11 @@
                 }
             }
         },
+        // The fork servers a run of wasm or llvm tests can build with.
+        "recorded-fork": {
+            "extends": "tool",
+            "compiler": { "path": "record-fork-server.sh", "reference_assemblies": false, "fork_server": true }
+        },
         "recorded-no-references": {
             "extends": "tool",
             "compiler": { "path": "record-compiler.sh", "reference_assemblies": false }

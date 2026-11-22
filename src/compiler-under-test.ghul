@@ -345,16 +345,24 @@ namespace Tester is
                 fi
             else
                 arguments.add_range(reference_arguments())
-                arguments.add_range(test.source_files)
-                arguments.add_range(["-o", if test.target() == TestTarget.WASM then "binary.wasm" else "binary.exe" fi])
 
-                result = runner.run(
-                    _executable,
-                    arguments,
-                    RUNNER.BUILD_TIMEOUT_MS,
-                    null,
-                    "compiler.out"
-                )
+                let output = if test.target() == TestTarget.WASM then "binary.wasm" else "binary.exe" fi
+                let served = _build_with_fork_server(runner, test, arguments, output)
+
+                if served? then
+                    result = served
+                else
+                    arguments.add_range(test.source_files)
+                    arguments.add_range(["-o", output])
+
+                    result = runner.run(
+                        _executable,
+                        arguments,
+                        RUNNER.BUILD_TIMEOUT_MS,
+                        null,
+                        "compiler.out"
+                    )
+                fi
             fi
 
             if !File.exists(runner.get_path("compiler.out")) then
@@ -374,6 +382,68 @@ namespace Tester is
             // FIXME: this is a bit convoluted:
             return File.exists(get_binary_path(runner))
         si
+
+        /// The fork servers wasm and llvm builds go to, or null to build each
+        /// with a compiler process of its own.
+        fork_servers: FORK_SERVER_POOL? public
+
+        /// Whether the run's configuration asks for fork servers.
+        wants_fork_servers: bool public
+
+        /// Makes the fork servers, where the configuration asks for them.
+        ///
+        /// - limit: the most servers that may run at once
+        start_fork_servers(limit: int) is
+            if wants_fork_servers /\ _run_mode == CompilerRunMode.LOCAL then
+                fork_servers = FORK_SERVER_POOL(_executable, limit)
+            fi
+        si
+
+        // The build's exit status where a fork server built it, with what
+        // the compiler wrote in `compiler.out`, or null where none could.
+        _build_with_fork_server(runner: RUNNER, test: TEST, arguments: LIST[string], output: string) -> int? is
+            let pool = fork_servers
+
+            if !pool? \/ !runner.may_use_fork_server then
+                return null
+            fi
+
+            let target = test.target()
+
+            if target != TestTarget.WASM /\ target != TestTarget.LLVM then
+                return null
+            fi
+
+            let shared = LIST[string](arguments |> filter(a => a.length > 0))
+            let request = runner.get_path("fork-request.rsp")
+            let lines = LIST[string](shared |> map(a => _response_line(a)))
+
+            lines.add_range(test.source_files |> map(a => _response_line(a)))
+            lines.add_range(["-o", output])
+
+            File.write_all_lines(request, lines)
+
+            let built = pool.build(shared, Path.get_full_path(request), Path.get_full_path(test.path), RUNNER.BUILD_TIMEOUT_MS)
+
+            if !built? then
+                return null
+            fi
+
+            File.write_all_text(runner.get_path("compiler.out"), built.output)
+
+            runner.was_served = true
+
+            return built.status
+        si
+
+        // An argument as a response file line holds it: quoted where it has
+        // a space in it.
+        _response_line(argument: string) -> string static =>
+            if argument.contains(' ') \/ argument.contains('\t') then
+                "\"{argument}\""
+            else
+                argument
+            fi
 
         // Format the test's sources, in place, over the copies the runner
         // made in the test's `formatted` directory. The formatter reads
