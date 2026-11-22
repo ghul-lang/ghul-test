@@ -195,11 +195,22 @@ namespace Tester is
         si
 
         try_queue_test(path: string) is
-            let flags_path = "{path}/ghulflags"
-            let marker = if _compiler_under_test.is_ghul_cli then PROJECT.MANIFEST else "ghulflags" fi
             let has_settings = TEST_SETTINGS.has(path)
 
-            if !File.exists("{path}/{marker}") /\ !has_settings then
+            // ghul-test 11 stopped reading these: a test that still has one
+            // is reported rather than silently left out or run without them.
+            for retired in ["ghulflags", "targets"] do
+                if File.exists(Path.join(path, retired)) then
+                    let replacement = if retired =~ "ghulflags" then "flags" else "build_targets" fi
+
+                    _undiscovered.add("{path} has a {retired} file, which is no longer read; put its contents in the {replacement} of a {TEST_SETTINGS.FILE}")
+                    return
+                fi
+            od
+
+            let marker = if _compiler_under_test.is_ghul_cli then PROJECT.MANIFEST else TEST_SETTINGS.FILE fi
+
+            if !File.exists(Path.join(path, marker)) /\ !has_settings then
                 if looks_like_test(path) then
                     _undiscovered.add("{path} looks like a test but has no {marker}")
                 fi
@@ -233,16 +244,6 @@ namespace Tester is
             let own: TEST_SETTINGS? mut = null
 
             if has_settings then
-                if File.exists(flags_path) then
-                    _undiscovered.add("{path} has both {TEST_SETTINGS.FILE} and ghulflags; its options belong in the flags of {TEST_SETTINGS.FILE}")
-                    return
-                fi
-
-                if TARGET_VARIANTS.has(path) then
-                    _undiscovered.add("{path} has both {TEST_SETTINGS.FILE} and a {TARGET_VARIANTS.TARGETS} file; its targets belong in the build_targets of {TEST_SETTINGS.FILE}")
-                    return
-                fi
-
                 let problem: string? mut = null
 
                 own = TEST_SETTINGS.read(path, problem ref)
@@ -254,14 +255,13 @@ namespace Tester is
             fi
 
             let settings = (run_settings ?? TEST_SETTINGS()).overridden_by(own)
-            let written = if File.exists(flags_path) then File.read_all_text(flags_path).trim() else "" fi
-            let flags = "{written} {settings.options}".trim()
+            let flags = settings.options.trim()
 
             // A test whose flags name its target is run in place under
             // build_targets, as it is without them: it is built for that one
             // target either way, and a copy would move it away from files it
             // names relative to itself.
-            if TARGET_VARIANTS.has(path) \/ own?.build_targets? \/ (build_targets? /\ !TEST.named_target_name(flags)?) then
+            if own?.build_targets? \/ (build_targets? /\ !TEST.named_target_name(flags)?) then
                 let problem: string? mut = null
 
                 let targets = variant_targets(path, flags, own?.build_targets, problem ref)
@@ -416,30 +416,23 @@ namespace Tester is
         si
 
         // The targets the test at `path` is built for, one variant each: the
-        // ones its settings' `build_targets` or its `targets` file name, or
-        // else the configuration's `build_targets`. Null, with the reason in `problem`, where the `targets`
-        // file cannot be used.
+        // ones its settings' `build_targets` name, or else the
+        // configuration's `build_targets`. Null, with the reason in
+        // `problem`, where the test's own `build_targets` cannot be used.
         variant_targets(path: string, flags: string, settings_targets: Collections.List[string]?, problem: string? ref) -> Collections.List[string]? is
             problem! = null
 
-            if TARGET_VARIANTS.has(path) \/ settings_targets? then
-                let named mut = settings_targets
-
-                if named? then
-                    if TEST.named_target(flags)? then
-                        problem! = "{TEST_SETTINGS.FILE} names build_targets and its flags name a target too; a test with build_targets leaves the target to them"
-                        return null
-                    fi
-                else
-                    named = TARGET_VARIANTS.read(path, flags, problem)
+            if let named = settings_targets then
+                if TEST.named_target(flags)? then
+                    problem! = "{TEST_SETTINGS.FILE} names build_targets and its flags name a target too; a test with build_targets leaves the target to them"
+                    return null
                 fi
 
-                if let wanted = build_targets /\ named? then
+                if let wanted = build_targets then
                     let left_out = wanted |> filter(target => !(named |> any(n => n =~ target))) |> ARRAY()
-                    let own = if settings_targets? then "{TEST_SETTINGS.FILE} build_targets win" else "{TARGET_VARIANTS.TARGETS} file wins" fi
 
                     if left_out.count > 0 then
-                        _overridden.add("{path}: its {own} over build_targets, so it is not built for {string.join(", ", left_out)}")
+                        _overridden.add("{path}: its {TEST_SETTINGS.FILE} build_targets win over build_targets, so it is not built for {string.join(", ", left_out)}")
                     fi
                 fi
 
@@ -503,7 +496,7 @@ namespace Tester is
                             test.direct_problem = problem
                         fi
                     elif flags.trim().length > 0 then
-                        pass_over("ghulflags is not empty, so only MSBuild can build it")
+                        pass_over("its flags are not empty, so only MSBuild can build it")
                         continue
                     else
                         let problem: string? mut = null

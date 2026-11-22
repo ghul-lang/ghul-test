@@ -1,0 +1,1 @@
+{"flags": "--dotnet --target dotnet", "build_targets": ["dotnet"]}

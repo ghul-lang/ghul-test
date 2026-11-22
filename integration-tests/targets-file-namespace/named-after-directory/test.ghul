@@ -1,5 +1,0 @@
-class THING is
-    init() is si
-si
-
-entry() => IO.Std.write_line("{THING().get_type()}");

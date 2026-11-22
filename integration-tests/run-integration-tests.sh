@@ -291,7 +291,7 @@ echo integration-tests/compiler-override-command: PASS
 
 echo integration-tests/undiscovered...
 
-# A directory holding a test.ghul or an expected snapshot but no ghulflags
+# A directory holding a test.ghul or an expected snapshot but no test.json
 # is never run, so it is named and fails the run; a directory holding other
 # source, such as a library a test builds against, is not a test at all.
 TEST_PROCESSES=1 $RUNNER integration-tests/undiscovered | tee actual-output
@@ -302,8 +302,8 @@ if [ "${PIPESTATUS[0]}" != "1" ]; then
     exit 1
 fi
 
-if ! grep -q "not run: integration-tests/undiscovered/no-flags looks like a test but has no ghulflags" actual-output ; then
-    echo integration-tests/undiscovered did not report the directory with no ghulflags
+if ! grep -q "not run: integration-tests/undiscovered/no-flags looks like a test but has no test.json" actual-output ; then
+    echo integration-tests/undiscovered did not report the directory with no test.json
 
     exit 1
 fi
@@ -999,48 +999,33 @@ fi
 echo integration-tests/project-shared: PASS
 
 
-echo integration-tests/targets-file...
+echo integration-tests/own-build-targets...
 
-# A test carrying a `targets` file runs once per target it names, in a
+# A test whose test.json names build_targets runs once per target, in a
 # directory of its own, `.targets/<target>/<test>/`, with that target's
 # expectation standing in for the plain one: `run.dotnet.expected` is what the
 # variant is held to, and the `run.expected` beside it says something else.
-TEST_PROCESSES=1 $RUNNER integration-tests/targets-file | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/own-build-targets | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
-    echo integration-tests/targets-file failed
+    echo integration-tests/own-build-targets failed
 
     exit 1
 fi
 
-if ! diff integration-tests/targets-file/expected-output actual-output ; then
-    echo integration-tests/targets-file output did not match expected output
+if ! diff integration-tests/own-build-targets/expected-output actual-output ; then
+    echo integration-tests/own-build-targets output did not match expected output
 
     exit 1
 fi
 
-if [ ! -f integration-tests/targets-file/hello/.targets/dotnet/hello/run.expected ] ; then
-    echo integration-tests/targets-file did not resolve the expectation into the variant directory
+if [ ! -f integration-tests/own-build-targets/hello/.targets/dotnet/hello/run.expected ] ; then
+    echo integration-tests/own-build-targets did not resolve the expectation into the variant directory
 
     exit 1
 fi
 
-echo integration-tests/targets-file: PASS
-
-echo integration-tests/targets-file-namespace...
-
-# A variant's directory is named after the test, so a name the compiler takes
-# from the directory a source sits in, such as a type's namespace, is the
-# same in the variant as in the test.
-TEST_PROCESSES=1 $RUNNER integration-tests/targets-file-namespace | tee actual-output
-
-if [ "${PIPESTATUS[0]}" != "0" ] || ! grep -q "pass: integration-tests/targets-file-namespace/named-after-directory\[dotnet\]" actual-output ; then
-    echo integration-tests/targets-file-namespace did not name the variant directory after the test
-
-    exit 1
-fi
-
-echo integration-tests/targets-file-namespace: PASS
+echo integration-tests/own-build-targets: PASS
 
 echo integration-tests/settings-namespace...
 
@@ -1056,49 +1041,49 @@ fi
 
 echo integration-tests/settings-namespace: PASS
 
-echo integration-tests/targets-file-unknown...
+echo integration-tests/own-build-targets-unknown...
 
-# A `targets` file naming something ghul-test cannot run is reported rather
+# build_targets naming something ghul-test cannot run is reported rather
 # than run under whatever target it would have defaulted to.
-TEST_PROCESSES=1 $RUNNER integration-tests/targets-file-unknown | tee actual-output
+TEST_PROCESSES=1 $RUNNER integration-tests/own-build-targets-unknown | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
-    echo integration-tests/targets-file-unknown did not exit 1
+    echo integration-tests/own-build-targets-unknown did not exit 1
 
     exit 1
 fi
 
-if ! grep -q "not run: integration-tests/targets-file-unknown/hello: targets names wasm32, which is not a target ghul-test can run" actual-output ; then
-    echo integration-tests/targets-file-unknown did not report the unknown target
+if ! grep -q "not run: integration-tests/own-build-targets-unknown/hello: test.json: build_targets names wasm32, which is not a target ghul-test can run" actual-output ; then
+    echo integration-tests/own-build-targets-unknown did not report the unknown target
 
     exit 1
 fi
 
-echo integration-tests/targets-file-unknown: PASS
+echo integration-tests/own-build-targets-unknown: PASS
 
-echo integration-tests/targets-file-flags...
+echo integration-tests/own-build-targets-flags...
 
-# A test cannot name its target twice: once in `ghulflags` and again in
-# `targets`.
-TEST_PROCESSES=1 $RUNNER integration-tests/targets-file-flags | tee actual-output
+# A test cannot name its target twice: once in its flags and again in its
+# build_targets.
+TEST_PROCESSES=1 $RUNNER integration-tests/own-build-targets-flags | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "1" ]; then
-    echo integration-tests/targets-file-flags did not exit 1
+    echo integration-tests/own-build-targets-flags did not exit 1
 
     exit 1
 fi
 
-if ! grep -q "not run: integration-tests/targets-file-flags/hello: ghulflags names a target and so does targets" actual-output ; then
-    echo integration-tests/targets-file-flags did not report the target named twice
+if ! grep -q "not run: integration-tests/own-build-targets-flags/hello: test.json names build_targets and its flags name a target too" actual-output ; then
+    echo integration-tests/own-build-targets-flags did not report the target named twice
 
     exit 1
 fi
 
-echo integration-tests/targets-file-flags: PASS
+echo integration-tests/own-build-targets-flags: PASS
 
 echo integration-tests/target-flags...
 
-# A configuration's target flags are added to every run a targets file
+# A configuration's target flags are added to every run a test's build_targets
 # produces for that target: the test prints a second line only when built with --define extra.
 TEST_PROCESSES=1 $RUNNER --config extra-define integration-tests/target-flags | tee actual-output
 
@@ -1170,9 +1155,9 @@ if ! grep -q "1 tests passed over for targets the configuration does not run" ac
     exit 1
 fi
 
-expect_configuration_pass "run targets, keeping a variant" --config dotnet-only ../targets-file
+expect_configuration_pass "run targets, keeping a variant" --config dotnet-only ../own-build-targets
 
-if ! grep -q "pass: ../targets-file/hello\[dotnet\]" actual-output ; then
+if ! grep -q "pass: ../own-build-targets/hello\[dotnet\]" actual-output ; then
     echo integration-tests/configurations: run targets did not keep the dotnet variant
     exit 1
 fi
@@ -1191,10 +1176,10 @@ if ! grep -q "pass: ../build-targets-named/hello$" actual-output ; then
     exit 1
 fi
 
-expect_configuration_pass "build targets, a targets file winning" --config build-targets ../targets-file
+expect_configuration_pass "build targets, a test's own winning" --config build-targets ../own-build-targets
 
-if ! grep -q "its targets file wins over build_targets, so it is not built for wasm" actual-output ; then
-    echo integration-tests/configurations: build targets did not report the targets file winning
+if ! grep -q "its test.json build_targets win over build_targets, so it is not built for wasm" actual-output ; then
+    echo integration-tests/configurations: build targets did not report the own build_targets of a test winning
     exit 1
 fi
 
@@ -1243,7 +1228,8 @@ expect_test_settings_problem() {
     fi
 }
 
-expect_test_settings_problem both "has both test.json and ghulflags"
+expect_test_settings_problem retired-ghulflags "has a ghulflags file, which is no longer read; put its contents in the flags of a test.json"
+expect_test_settings_problem retired-targets "has a targets file, which is no longer read; put its contents in the build_targets of a test.json"
 expect_test_settings_problem run-wide "compiler says how the whole run is made, so a test cannot set it"
 expect_test_settings_problem unknown "check-only is not a configuration key"
 expect_test_settings_problem bad-optimise "optimise must be 0, 1, 2 or 3"

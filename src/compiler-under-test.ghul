@@ -387,7 +387,7 @@ namespace Tester is
             // The same flags the two builds get: a flag that changes how the
             // compiler reads a file - `--global-namespace`, say - changes
             // what the formatter reads too, and a test that needs one in its
-            // `ghulflags` means it for all three invocations.
+            // `test.json` flags means it for all three invocations.
             if test.flags.length > 0 then
                 arguments.add_range(
                     test.flags.split([' ']) |> map((flag) -> string => flag.trim())
