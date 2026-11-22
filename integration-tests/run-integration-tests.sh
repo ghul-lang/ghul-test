@@ -1247,7 +1247,11 @@ commands_match() {
         exit 1
     fi
 
-    if ! jq -r '.options + .sources + ["-o", .output] | .[]' integration-tests/configurations/commands.jsonl | diff - integration-tests/configurations/compiler-arguments ; then
+    # Node rather than jq, which the CI image does not have.
+    if ! node -e '
+        const c = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+        for (const a of [...c.options, ...c.sources, "-o", c.output]) console.log(a);
+    ' integration-tests/configurations/commands.jsonl | diff - integration-tests/configurations/compiler-arguments ; then
         cat actual-output
         echo integration-tests/configurations: --commands with $name differs from what a run hands the compiler
         exit 1
