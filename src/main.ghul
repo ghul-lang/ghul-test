@@ -247,6 +247,7 @@ namespace Tester is
 
             queue.run_targets = run_targets
             queue.build_targets = configuration.build_targets
+            queue.run_settings = configuration.settings
             queue.package_flags = configuration.package_flags
             queue.target_loaders = configuration.target_loaders
 

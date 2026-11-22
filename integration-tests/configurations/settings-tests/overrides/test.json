@@ -1,0 +1,4 @@
+{
+    // replaces the flags the configuration gives every test
+    "flags": ""
+}

@@ -145,7 +145,12 @@ namespace Tester is
             fi
 
             _compiler_command = trimmed
+            _compiler_named = true
         si
+
+        // Whether the run named the compiler, in its configuration or on its
+        // command line, rather than finding one.
+        _compiler_named: bool
 
         _words(command: string) -> Collections.List[string] =>
             command.split([' ']) |> filter(word => word.length > 0) |> LIST()
@@ -268,10 +273,18 @@ namespace Tester is
                 // The command and options MSBuild would have used, with the
                 // project's own runtime, so the program is the one
                 // `dotnet build` would have produced.
-                // The project's own command wins, then the run's, as with
-                // MSBuild, where a property set in the project overrides the
-                // one the runner hands it.
-                let command = LIST[string](direct.compiler ?? _words(_compiler_command ?? "dotnet ghul-compiler"))
+                // A compiler the run names wins over the project's own, so
+                // a configuration can test another compiler on projects that
+                // name one; otherwise the project's wins over one the run
+                // found, as a property set in a project does with MSBuild.
+                let command =
+                    LIST[string](
+                        if _compiler_named /\ _compiler_command? then
+                            _words(_compiler_command)
+                        else
+                            direct.compiler ?? _words(_compiler_command ?? "dotnet ghul-compiler")
+                        fi
+                    )
                 let executable = command[0]
 
                 command.remove_at(0)
