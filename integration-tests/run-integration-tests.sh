@@ -11,7 +11,16 @@ if ! dotnet build -nologo -v quiet > build-output 2>&1 ; then
     exit 1
 fi
 
-RUNNER="dotnet bin/Debug/net10.0/ghul-test.dll"
+# GHUL_TEST_RUNNER names another build of the runner to check, such as a
+# Native AOT executable, by its absolute path.
+RUNNER="${GHUL_TEST_RUNNER:-dotnet bin/Debug/net10.0/ghul-test.dll}"
+
+# The disassembler that runner ships: a Native AOT executable has it beside it.
+if [ -n "${GHUL_TEST_RUNNER:-}" ]; then
+    ILDASM="$(dirname "$GHUL_TEST_RUNNER")/ildasm"
+else
+    ILDASM=bin/Debug/net10.0/runtimes/linux-x64/native/ildasm
+fi
 
 echo integration-tests/execution-fail...
 
@@ -434,6 +443,10 @@ echo integration-tests/ildasm-override-relative...
 # from another directory: every test is launched with its own folder as the
 # working directory. Unresolved, it would name a different file there, or
 # nothing.
+# The file it names arrives from the package without its execute bit, and
+# the runner leaves a path a configuration names as it is.
+chmod +x bin/Debug/net10.0/runtimes/linux-x64/native/ildasm
+
 TEST_PROCESSES=1 $RUNNER --config relative-ildasm integration-tests/il-expected | tee actual-output
 
 if [ "${PIPESTATUS[0]}" != "0" ]; then
@@ -824,7 +837,7 @@ echo integration-tests/ildasm-not-executable...
 # "Permission denied" naming a path that exists. Only reproducible against the
 # packaged layout, which is what every consumer installs, so the built tool is
 # run directly here with the bit cleared.
-chmod -x bin/Debug/net10.0/runtimes/linux-x64/native/ildasm
+chmod -x "$ILDASM"
 
 rm -f integration-tests/il-expected/hello-world/il.out
 
@@ -836,7 +849,7 @@ if [ "${PIPESTATUS[0]}" != "0" ]; then
     exit 1
 fi
 
-if [ ! -x bin/Debug/net10.0/runtimes/linux-x64/native/ildasm ]; then
+if [ ! -x "$ILDASM" ]; then
     echo integration-tests/ildasm-not-executable did not restore the execute bit
 
     exit 1
@@ -1107,7 +1120,7 @@ echo integration-tests/configurations...
 # directory, and the configuration says where the compiler and the runtime
 # come from, so CI has no bearing on it. Run from the fixture directory, with
 # CI unset, so nothing but the configuration can be choosing.
-CONFIG_RUNNER="dotnet $(pwd)/bin/Debug/net10.0/ghul-test.dll"
+CONFIG_RUNNER="${GHUL_TEST_RUNNER:-dotnet $(pwd)/bin/Debug/net10.0/ghul-test.dll}"
 
 expect_configuration_pass() {
     local name=$1

@@ -99,7 +99,14 @@ namespace Tester is
                 return null
             fi
 
-            return Path.join([folder, "runtimes", _runtime_identifier(), "native", _file_name()])
+            let in_runtimes = Path.join([folder, "runtimes", _runtime_identifier(), "native", _file_name()])
+
+            // A Native AOT executable is published with the native beside it.
+            if !File.exists(in_runtimes) /\ File.exists(Path.join(folder, _file_name())) then
+                return Path.join(folder, _file_name())
+            fi
+
+            return in_runtimes
         si
 
         _runtime_identifier() -> string static =>
