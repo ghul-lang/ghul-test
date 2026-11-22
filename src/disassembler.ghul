@@ -93,21 +93,20 @@ namespace Tester is
         si
 
         _beside_tool() -> string? static is
-            let assembly = Ghul.Reflection.Assembly.get_executing_assembly()
-
-            let location = assembly.location
-
-            if string.is_null_or_white_space(location) then
-                return null
-            fi
-
-            let folder = Path.get_directory_name(Path.get_full_path(location))
+            let folder = System.AppContext.base_directory
 
             if !folder? then
                 return null
             fi
 
-            return Path.join([folder, "runtimes", _runtime_identifier(), "native", _file_name()])
+            let in_runtimes = Path.join([folder, "runtimes", _runtime_identifier(), "native", _file_name()])
+
+            // A Native AOT executable is published with the native beside it.
+            if !File.exists(in_runtimes) /\ File.exists(Path.join(folder, _file_name())) then
+                return Path.join(folder, _file_name())
+            fi
+
+            return in_runtimes
         si
 
         _runtime_identifier() -> string static =>

@@ -645,13 +645,7 @@ namespace Tester is
             Path.join(_publish, file_name)
 
         get_ghul_test_runtime_path() -> string is
-            let executing_assembly = Ghul.Reflection.Assembly.get_executing_assembly()
-
-            let assembly_path = Path.get_full_path(executing_assembly.location)
-
-            let result = Path.get_directory_name(assembly_path)
-
-            return Path.join(result, "ghul-runtime.dll")
+            return Path.join(System.AppContext.base_directory, "ghul-runtime.dll")
         si
 
         // Locate the .NET reference-assembly directory to hand the compiler.
@@ -693,14 +687,10 @@ namespace Tester is
         // runtime we roll forward onto, so an ecosystem-wide bump needs no
         // change here.
         get_target_framework() -> string is
-            let assembly = Ghul.Reflection.Assembly.get_executing_assembly()
-            let assembly_path = Path.get_full_path(assembly.location)
-            let directory = Path.get_directory_name(assembly_path)
-            let name = Path.get_file_name_without_extension(assembly_path)
-            let config_path = Path.join(directory, "{name}.runtimeconfig.json")
+            let config_path = Path.join(System.AppContext.base_directory, "ghul-test.runtimeconfig.json")
 
             if !File.exists(config_path) then
-                throw Exception("runtime config not found at {config_path}")
+                return "net{System.Environment.version.major}.0"
             fi
 
             let target_framework = extract_json_string(File.read_all_text(config_path), "tfm")

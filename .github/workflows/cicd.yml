@@ -122,8 +122,70 @@ jobs:
       if: ${{ github.event_name == 'push' }}
       run: dotnet nuget push ./nupkg/*.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate --no-symbols
 
+  # The runner as a Native AOT executable, so a job that builds and runs
+  # tests with the native compiler needs no .NET to run them either. Each is
+  # checked by running the runner's own integration tests with it, and is
+  # attached to the release as ghul-test-<rid>.tar.gz beside the package of
+  # the same version.
+  native:
+    name: Build the Native AOT runner (${{ matrix.rid }})
+    needs: [version]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - rid: linux-x64
+          runs-on: ubuntu-latest
+        - rid: linux-arm64
+          runs-on: ubuntu-24.04-arm
+
+    runs-on: ${{ matrix.runs-on }}
+
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: '10.0.x'
+
+    - uses: actions/setup-node@v7
+      with:
+        node-version: '26'
+
+    - name: Restore local .NET tools
+      run: dotnet tool restore
+
+    - name: Publish the Native AOT runner
+      run: dotnet publish ghul-test.ghulproj -c Release -r ${{ matrix.rid }} -p:PublishAot=true -p:Version=${{ needs.version.outputs.package }} -o native/ghul-test
+
+    # The disassembler the runner ships is the linux-x64 one, so the IL
+    # tests among the integration tests run only there.
+    - name: Run the integration tests with the Native AOT runner
+      if: matrix.rid == 'linux-x64'
+      run: GHUL_TEST_RUNNER="$PWD/native/ghul-test/ghul-test" integration-tests/run-integration-tests.sh
+
+    - name: Run a test with the Native AOT runner
+      if: matrix.rid != 'linux-x64'
+      run: TEST_PROCESSES=1 native/ghul-test/ghul-test integration-tests/execution-pass
+
+    - name: Package the Native AOT runner
+      run: |
+        rm -f native/ghul-test/*.dbg
+        tar -czf ghul-test-${{ matrix.rid }}.tar.gz -C native ghul-test
+
+    - uses: actions/upload-artifact@v7
+      with:
+        name: native-${{ matrix.rid }}
+        path: ghul-test-${{ matrix.rid }}.tar.gz
+
   create_release:
-    needs: [version, build]
+    needs: [version, build, native]
     name: Create release
     runs-on: ubuntu-latest
 
@@ -144,6 +206,13 @@ jobs:
         name: package
         path: nupkg
 
+    - name: Download the Native AOT runners
+      uses: actions/download-artifact@v8
+      with:
+        pattern: native-*
+        merge-multiple: true
+        path: native
+
     - name: Create changelog
       run: git log -1 --format="%s%n%n%b%n%n" >changelog.txt
 
@@ -153,5 +222,6 @@ jobs:
       run: |
         gh release create "${{ needs.version.outputs.tag }}" \
           ./nupkg/ghul.test.${{ needs.version.outputs.package }}.nupkg \
+          ./native/ghul-test-*.tar.gz \
           --title "${{ needs.version.outputs.tag }}" \
           --notes-file changelog.txt

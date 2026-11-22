@@ -156,6 +156,10 @@ Environment variables:
 
 The runner prints progress for each test and a final summary indicating total, enabled, passed and failed counts. The configuration it runs is named on standard error.
 
+## Native AOT Runner
+
+Each release also carries the runner as a self-contained Native AOT executable, `ghul-test-linux-x64.tar.gz` and `ghul-test-linux-arm64.tar.gz`, beside the NuGet tool of the same version. Unpacked, `ghul-test/ghul-test` runs as `dotnet ghul-test` does, with the disassembler beside it, and needs no .NET to run tests built by a compiler that needs none, such as the native ghūl compiler for the wasm and llvm targets. A test built for .NET still needs the SDK. The disassembler shipped is the linux-x64 one, so the arm64 runner cannot check IL snapshots.
+
 ## Runtime Library Handling
 
 In a `compiler` build the produced executable expects to find `ghul-runtime.dll` beside it, so the runner links the configuration's runtime into the test directory, and deletes the link when the test passes. A project build needs no link: its runtime comes from its own `PackageReference`.
@@ -166,7 +170,7 @@ This runner does **not** execute arbitrary MSBuild projects. It either drives th
 
 ## Dependencies
 
-The runner relies on several standard Unix utilities being available in the environment: `grep`, `sort`, `diff` and `ln`. A .NET 10 SDK installation is required; mono is not supported.
+The runner relies on several standard Unix utilities being available in the environment: `grep`, `sort`, `diff` and `ln`. The NuGet tool needs a .NET 10 SDK installation; mono is not supported. The [Native AOT runner](#native-aot-runner) needs .NET only for the tests it builds for .NET.
 
 ## Writing New Tests
 

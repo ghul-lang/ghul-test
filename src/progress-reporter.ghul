@@ -10,8 +10,7 @@ namespace Tester is
     use IO.Directory
     use IO.Path
 
-    use System.Text.Json.JsonSerializer
-    use System.Text.Json.JsonSerializerOptions
+    use System.Text.Json.Utf8JsonWriter
 
     // Snapshot of one test run, serialized to the run's status file. Field
     // names are the wire format: consumers deserialize this shape, so
@@ -42,6 +41,49 @@ namespace Tester is
 
         @suppress("field-definite-assignment")
         init() is si
+
+        // The snapshot as JSON, written member by member rather than through
+        // reflection, which a Native AOT build of the runner does not have.
+        to_json() -> string is
+            let stream = IO.MemoryStream()
+            let writer = Utf8JsonWriter(stream, _)
+
+            writer.write_start_object()
+            writer.write_number("version", version)
+            writer.write_number("pid", pid)
+            writer.write_string("cwd", cwd)
+            _write_strings(writer, "suites", suites)
+            writer.write_string("state", state)
+            writer.write_number("started_at", started_at)
+            writer.write_number("updated_at", updated_at)
+            writer.write_number("total", total)
+            writer.write_number("completed", completed)
+            writer.write_number("passed", passed)
+            writer.write_number("failed", failed)
+            writer.write_number("skipped", skipped)
+            writer.write_number("percent", percent)
+            _write_strings(writer, "running", running)
+            writer.write_string("last", last)
+            writer.write_end_object()
+            writer.flush()
+
+            return Text.Encoding.utf8.get_string(stream.to_array())
+        si
+
+        _write_strings(writer: Utf8JsonWriter, name: string, values: ARRAY[string]?) is
+            if !values? then
+                writer.write_null(name)
+                return
+            fi
+
+            writer.write_start_array(name)
+
+            for value in values do
+                writer.write_string_value(value)
+            od
+
+            writer.write_end_array()
+        si
     si
 
     // Publishes run progress to a per-process pair of files under
@@ -62,8 +104,6 @@ namespace Tester is
         _record: RUN_PROGRESS
         _running: MutableList[string]
 
-        _options: JsonSerializerOptions
-
         // Reporting is best-effort and silent, which makes a broken reporter
         // indistinguishable from a disabled one. Set GHUL_TEST_PROGRESS_DEBUG
         // to have the suppressed failure printed instead.
@@ -80,11 +120,6 @@ namespace Tester is
             _debug = System.Environment.get_environment_variable("GHUL_TEST_PROGRESS_DEBUG")?
 
             _running = LIST[string]()
-
-            // Fields are deliberately excluded: the record's members are
-            // properties, and including fields would emit each property's
-            // backing field alongside it.
-            _options = JsonSerializerOptions()
 
             _record = RUN_PROGRESS()
 
@@ -225,7 +260,7 @@ namespace Tester is
             try
                 // Written aside and moved so a sampling consumer never reads a
                 // partial object.
-                File.write_all_text(_snapshot_temp_path, JsonSerializer.serialize[RUN_PROGRESS](_record, _options))
+                File.write_all_text(_snapshot_temp_path, _record.to_json())
                 File.move(_snapshot_temp_path, _snapshot_path, true)
             catch ex: Exception
                 _enabled = false
