@@ -186,6 +186,12 @@ namespace Tester is
                         continue
                     fi
 
+                    // A test's formatted/ holds the formatter's output from a
+                    // run, not a test.
+                    if Path.get_file_name(entry)! =~ "formatted" /\ TEST_SETTINGS.has(path) then
+                        continue
+                    fi
+
                     try_queue_tests(entry)
                 od
             catch ex: Exception
