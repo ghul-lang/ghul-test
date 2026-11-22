@@ -19,6 +19,14 @@ namespace Tester is
         /// file spell them.
         names: ARRAY[string] static => ["dotnet", "wasm", "llvm"]
 
+        /// The name `target` is known by, as `--target` spells it.
+        name_of(target: TestTarget) -> string static =>
+            case target
+            when TestTarget.DOTNET then "dotnet"
+            when TestTarget.WASM then "wasm"
+            when TestTarget.LLVM then "llvm"
+            esac
+
         /// The target `name` names, or null where it names none ghul-test
         /// knows how to run.
         of(name: string) -> TestTarget? static =>

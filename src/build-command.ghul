@@ -1,0 +1,100 @@
+namespace Tester is
+    use Collections.Iterable
+    use Collections.LIST
+    use Ghul.Pipes
+    use Pair = Collections.KeyValuePair
+
+    use System.Text.Json.Utf8JsonWriter
+
+    /// The command that builds one test: what a run executes, and what
+    /// `--commands` prints in its place.
+    class BUILD_COMMAND is
+        /// The program the build runs.
+        executable: string public
+
+        /// The arguments before the source files: every option, the
+        /// libraries and the reference assemblies.
+        options: LIST[string] public
+
+        /// The source files, relative to the test's directory, which the
+        /// build runs in. Empty for a build that finds its own sources.
+        sources: LIST[string] public
+
+        /// The file the compiler writes, named with `-o` after the sources,
+        /// or null for a build that names its own output.
+        output: string? public
+
+        /// The environment variables the build is run with, beyond the
+        /// runner's own.
+        environment: LIST[Pair[string, string]] public
+
+        init(executable: string, options: Iterable[string]) is
+            self.executable = executable
+            self.options = LIST[string](options |> filter(option => option.length > 0))
+            sources = LIST[string]()
+            output = null
+            environment = LIST[Pair[string, string]]()
+        si
+
+        /// Every argument, in the order the build is given them: the
+        /// options, the sources, then `-o` and the output.
+        arguments: LIST[string] is
+            let result = LIST[string](options)
+
+            result.add_range(sources)
+
+            if let file = output then
+                result.add_range(["-o", file])
+            fi
+
+            return result
+        si
+
+        /// The command as one line of JSON, naming the test it builds, the
+        /// directory it runs in and the target it builds for.
+        ///
+        /// - test: the test's name, as a run reports it
+        /// - directory: the full path of the directory the build runs in
+        /// - target: the target the build is for
+        to_json(test: string, directory: string, target: string) -> string is
+            let stream = IO.MemoryStream()
+            let writer = Utf8JsonWriter(stream, _)
+
+            writer.write_start_object()
+            writer.write_string("test", test)
+            writer.write_string("directory", directory)
+            writer.write_string("target", target)
+            writer.write_string("executable", executable)
+            _write_strings(writer, "options", options)
+            _write_strings(writer, "sources", sources)
+
+            if let file = output then
+                writer.write_string("output", file)
+            else
+                writer.write_null("output")
+            fi
+
+            writer.write_start_object("environment")
+
+            for pair in environment do
+                writer.write_string(pair.key, pair.value)
+            od
+
+            writer.write_end_object()
+            writer.write_end_object()
+            writer.flush()
+
+            return Text.Encoding.utf8.get_string(stream.to_array())
+        si
+
+        _write_strings(writer: Utf8JsonWriter, name: string, values: Iterable[string]) static is
+            writer.write_start_array(name)
+
+            for value in values do
+                writer.write_string_value(value)
+            od
+
+            writer.write_end_array()
+        si
+    si
+si

@@ -236,7 +236,12 @@ namespace Tester is
             return try_find_published_compiler(publish)
         si
 
-        run_compiler(runner: RUNNER, test: TEST) -> bool is
+        /// The command that builds `test`, as a run executes it.
+        ///
+        /// - test: the test to build
+        /// - invariant_globalization: whether the build runs in invariant
+        ///   globalization mode, which an MSBuild build passes on to its nodes
+        command_for(test: TEST, invariant_globalization: bool) -> BUILD_COMMAND is
             let arguments = LIST[string]()
 
             arguments.add_range(_arguments)
@@ -247,28 +252,16 @@ namespace Tester is
                 )
             fi
 
-            let result mut = -1
-
             if _run_mode == CompilerRunMode.GHUL_CLI then
-                // ghul-cli writes its own messages to standard error and the
-                // compiler's to standard output: the shell merges the two in
-                // the order they are written, which two capture files would
-                // lose.
-                let command = LIST[string](["-c", "exec \"$0\" \"$@\" 2>&1"])
+                let words = LIST[string](_executable.split([' ']) |> filter(word => word.length > 0))
+                let executable = words[0]
 
-                command.add_range(_executable.split([' ']) |> filter(word => word.length > 0))
-                command.add("build")
+                words.remove_at(0)
+                words.add("build")
+                words.add_range(["--target", test.project!.target])
+                words.add_range(arguments |> skip(1))
 
-                command.add_range(["--target", test.project!.target])
-                command.add_range(arguments |> skip(1))
-
-                result = runner.run(
-                    "sh",
-                    command,
-                    RUNNER.BUILD_TIMEOUT_MS,
-                    "compiler.out",
-                    null
-                )
+                return BUILD_COMMAND(executable, words)
             elif let direct = test.direct then
                 // The command and options MSBuild would have used, with the
                 // project's own runtime, so the program is the one
@@ -277,7 +270,7 @@ namespace Tester is
                 // a configuration can test another compiler on projects that
                 // name one; otherwise the project's wins over one the run
                 // found, as a property set in a project does with MSBuild.
-                let command =
+                let options =
                     LIST[string](
                         if _compiler_named /\ _compiler_command? then
                             _words(_compiler_command)
@@ -285,23 +278,109 @@ namespace Tester is
                             direct.compiler ?? _words(_compiler_command ?? "dotnet ghul-compiler")
                         fi
                     )
-                let executable = command[0]
+                let executable = options[0]
 
-                command.remove_at(0)
-                command.add_range(["--v3"])
-                command.add_range(direct.options)
+                options.remove_at(0)
+                options.add_range(["--v3"])
+                options.add_range(direct.options)
 
                 // Another target is given its libraries by the
                 // configuration, and references no assemblies.
                 if direct.target? then
-                    command.add_range(direct.target_options)
+                    options.add_range(direct.target_options)
                 else
-                    command.add_range(reference_arguments(direct.runtime_path))
+                    options.add_range(reference_arguments(direct.runtime_path))
                 fi
 
+                let command = BUILD_COMMAND(executable, options)
+
+                command.sources.add_range(test.source_files)
+                command.output = direct.output_name
+
+                return command
+            elif _run_mode == CompilerRunMode.DOTNET then
+                // A build in invariant globalization mode starts MSBuild
+                // nodes in that mode too, and a node left running for reuse
+                // is handed to the next build on the machine, whatever its
+                // culture: one asking for a named culture then kills it. So
+                // these nodes end with the build that started them.
+                if invariant_globalization then
+                    arguments.add("-nodeReuse:false")
+                fi
+
+                let command = BUILD_COMMAND(_executable, arguments)
+
+                // MSBuild reads environment variables as properties, so
+                // this sets `GhulCompiler` for the build. Passing it on the
+                // command line instead would not survive a value containing
+                // spaces.
+                if let compiler = _compiler_command then
+                    command.environment.add(Pair[string, string]("GhulCompiler", compiler))
+                fi
+
+                return command
+            fi
+
+            arguments.add_range(reference_arguments())
+
+            let command = BUILD_COMMAND(_executable, arguments)
+
+            command.sources.add_range(test.source_files)
+            command.output = if test.target() == TestTarget.WASM then "binary.wasm" else "binary.exe" fi
+
+            return command
+        si
+
+        run_compiler(runner: RUNNER, test: TEST) -> bool is
+            let command = command_for(test, runner.uses_invariant_globalization)
+            let result mut = -1
+
+            if _run_mode == CompilerRunMode.GHUL_CLI then
+                // ghul-cli writes its own messages to standard error and the
+                // compiler's to standard output: the shell merges the two in
+                // the order they are written, which two capture files would
+                // lose.
+                let shell = LIST[string](["-c", "exec \"$0\" \"$@\" 2>&1", command.executable])
+
+                shell.add_range(command.arguments)
+
+                result = runner.run(
+                    "sh",
+                    shell,
+                    RUNNER.BUILD_TIMEOUT_MS,
+                    "compiler.out",
+                    null
+                )
+            elif !command.output? then
+                if command.environment.count > 0 then
+                    result = runner.run(
+                        command.executable,
+                        command.arguments,
+                        RUNNER.BUILD_TIMEOUT_MS,
+                        "compiler.out", // MSBuild coerces stderr output to stdout
+                        null,
+                        command.environment
+                    )
+                else
+                    result = runner.run(
+                        command.executable,
+                        command.arguments,
+                        RUNNER.BUILD_TIMEOUT_MS,
+                        "compiler.out", // MSBuild coerces stderr output to stdout
+                        null
+                    )
+                fi
+            else
+                let may_serve =
+                    if let direct = test.direct then
+                        direct.target? /\ fork_servers? /\ fork_servers.executable =~ command.executable
+                    else
+                        true
+                    fi
+
                 let served =
-                    if direct.target? /\ fork_servers? /\ fork_servers.executable =~ executable then
-                        _build_with_fork_server(runner, test, command, direct.output_name)
+                    if may_serve then
+                        _build_with_fork_server(runner, test, command.options, command.output!)
                     else
                         null
                     fi
@@ -309,70 +388,17 @@ namespace Tester is
                 if served? then
                     result = served
                 else
-                    command.add_range(test.source_files)
-                    command.add_range(["-o", direct.output_name])
-
                     result = runner.run(
-                        executable,
-                        command,
+                        command.executable,
+                        command.arguments,
                         RUNNER.BUILD_TIMEOUT_MS,
                         null,
                         "compiler.out"
                     )
                 fi
 
-                name_the_project(runner.get_path("compiler.out"), direct.project_path)
-            elif _run_mode == CompilerRunMode.DOTNET then
-                // A build in invariant globalization mode starts MSBuild
-                // nodes in that mode too, and a node left running for reuse
-                // is handed to the next build on the machine, whatever its
-                // culture: one asking for a named culture then kills it. So
-                // these nodes end with the build that started them.
-                if runner.uses_invariant_globalization then
-                    arguments.add("-nodeReuse:false")
-                fi
-
-                if _compiler_command? then
-                    // MSBuild reads environment variables as properties, so
-                    // this sets `GhulCompiler` for the build. Passing it on the
-                    // command line instead would not survive a value containing
-                    // spaces.
-                    result = runner.run(
-                        _executable,
-                        arguments,
-                        RUNNER.BUILD_TIMEOUT_MS,
-                        "compiler.out", // MSBuild coerces stderr output to stdout
-                        null,
-                        [Pair[string, string]("GhulCompiler", _compiler_command)]
-                    )
-                else
-                    result = runner.run(
-                        _executable,
-                        arguments,
-                        RUNNER.BUILD_TIMEOUT_MS,
-                        "compiler.out", // MSBuild coerces stderr output to stdout
-                        null
-                    )
-                fi
-            else
-                arguments.add_range(reference_arguments())
-
-                let output = if test.target() == TestTarget.WASM then "binary.wasm" else "binary.exe" fi
-                let served = _build_with_fork_server(runner, test, arguments, output)
-
-                if served? then
-                    result = served
-                else
-                    arguments.add_range(test.source_files)
-                    arguments.add_range(["-o", output])
-
-                    result = runner.run(
-                        _executable,
-                        arguments,
-                        RUNNER.BUILD_TIMEOUT_MS,
-                        null,
-                        "compiler.out"
-                    )
+                if let direct = test.direct then
+                    name_the_project(runner.get_path("compiler.out"), direct.project_path)
                 fi
             fi
 

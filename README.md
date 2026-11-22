@@ -136,7 +136,7 @@ Paths are relative to the file. A configuration holds:
 ## Command Line Usage
 
 ```text
-ghul-test [--config <name>] [--compiler <command>] [--tag <name>]... [--not-tag <name>]... [--shard <index>/<count>] <test-folder> [...]
+ghul-test [--config <name>] [--compiler <command>] [--tag <name>]... [--not-tag <name>]... [--shard <index>/<count>] [--commands <file>] <test-folder> [...]
 ```
 
 - `--config <name>` – run the named configuration from `ghul-test.json`; without it, the file's `default` runs. A run with no `ghul-test.json` at or above the working directory, or with neither, is refused. See [Configurations](#configurations).
@@ -144,6 +144,7 @@ ghul-test [--config <name>] [--compiler <command>] [--tag <name>]... [--not-tag 
 - `--tag <name>` – restrict discovery to tests whose `tags` file contains at least one of the given names. Repeatable; the requested tags are matched as a union (a test runs if it carries *any* of them), not an intersection. A test with no `tags` file is excluded whenever any `--tag` is given. The run's summary counts the tests the tags left out.
 - `--not-tag <name>` - exclude tests whose `tags` file contains any of the given names. Repeatable, and matched as a union like `--tag`. A test with no `tags` file is never excluded. Exclusion wins over inclusion, so `--tag generics --not-tag async` runs the generics tests that are not also async ones.
 - `--shard <index>/<count>` - run only one part of the suite, so several processes can divide it between them. `--shard 2/6` runs the second of six parts. Tests are striped by discovery order rather than cut into contiguous blocks, since discovery walks the tree in sorted order and a block would put a whole directory into one shard. Every discovered test belongs to exactly one shard, so running all `<count>` of them runs the suite exactly once. The run reports how many of the discovered tests it took, and summing that across the shards shows none was dropped. Applies after `--tag`, so the two compose.
+- `--commands <file>` - build and run nothing: write to `<file>` the command each selected test would be built with, one JSON object a line, and exit. Each object gives `test` (its name as a run reports it), `target`, `directory` (where the build runs: a test built for several targets has a copy per target under `.targets/`), `executable`, `options` (every argument before the sources, including the configuration's flags, the test's `test.json` settings, libraries and reference assemblies), `sources`, `output` (the file named with `-o` after the sources, or null where the build names its own) and `environment`. Running `executable` with `options`, `sources` and `-o <output>` in `directory` is the build a run makes, so a script that compiles tests itself takes the arguments from here, replacing `output` with its own.
 - `<test-folder>` – one or more directories containing tests. Each is recursively searched for subdirectories with a `test.json`, or for a `ghul-cli` build with a `ghul-project.json`.
 
 The options earlier versions took in place of a configuration (`--ci`, `--no-ci`, `--use-dotnet-build`, `--direct`, `--use-ghul-cli`, `--ghul`, `--target`, `--runtime-dll`, `--ildasm`, `--target-flags`) are refused, naming what the configuration says instead.

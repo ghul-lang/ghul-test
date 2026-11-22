@@ -124,7 +124,16 @@ namespace Tester is
             target_loaders = Collections.MAP[string, string]()
         si
 
+        /// Where `--commands` writes each queued test's build command, one
+        /// JSON line each, in place of running the tests; null for a run.
+        commands_file: string? public
+
         run_queued_tests() is
+            if let file = commands_file then
+                write_build_commands(file)
+                return
+            fi
+
             _progress_reporter.on_discovered(count)
 
             report_missing_disassembler()
@@ -159,6 +168,24 @@ namespace Tester is
             od
 
             _progress_reporter.close()
+        si
+
+        // Writes the command each queued test is built with to `file`, one
+        // JSON line each, as a run would execute it, and builds nothing.
+        write_build_commands(file: string) is
+            let lines = LIST[string]()
+
+            for test in _tests do
+                let invariant = !File.exists(Path.combine(test.path, RUNNER.CULTURES))
+                let command = _compiler_under_test.command_for(test, invariant)
+                let target = TEST_TARGETS.name_of(test.target())
+
+                lines.add(command.to_json(test.name, Path.get_full_path(test.path), target))
+            od
+
+            File.write_all_lines(file, lines)
+
+            Std.write_line("{lines.count} build commands written to {file}")
         si
 
         report_progress(results: Iterable[Result]) is
