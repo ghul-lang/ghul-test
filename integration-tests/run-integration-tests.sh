@@ -1042,6 +1042,20 @@ fi
 
 echo integration-tests/targets-file-namespace: PASS
 
+echo integration-tests/settings-namespace...
+
+# The same for a test whose test.json names its build_targets: the variant
+# keeps the test.json, which marks the directory its namespace is named from.
+TEST_PROCESSES=1 $RUNNER integration-tests/settings-namespace | tee actual-output
+
+if [ "${PIPESTATUS[0]}" != "0" ] || ! grep -q "pass: integration-tests/settings-namespace/named-after-directory\[dotnet\]" actual-output ; then
+    echo integration-tests/settings-namespace did not name the namespace in the variant after the test
+
+    exit 1
+fi
+
+echo integration-tests/settings-namespace: PASS
+
 echo integration-tests/targets-file-unknown...
 
 # A `targets` file naming something ghul-test cannot run is reported rather

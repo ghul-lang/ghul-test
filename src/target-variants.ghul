@@ -154,7 +154,7 @@ namespace Tester is
         /// expectation for another target. An expectation for this target
         /// takes the plain name, and shadows the plain file.
         name_in_variant(name: string, target: string, names: Collections.SET[string]) -> string? static is
-            if name =~ TARGETS \/ name =~ "ghulflags" \/ name =~ TEST_SETTINGS.FILE \/ is_artifact(name) then
+            if name =~ TARGETS \/ name =~ "ghulflags" \/ is_artifact(name) then
                 return null
             fi
 
