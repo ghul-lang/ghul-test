@@ -1,0 +1,228 @@
+namespace Tester is
+    use IO.File
+    use IO.Path
+
+    use Collections.LIST
+
+    use System.Text.Json.JsonDocument
+    use System.Text.Json.JsonDocumentOptions
+    use System.Text.Json.JsonCommentHandling
+    use System.Text.Json.JsonElement
+    use System.Text.Json.JsonValueKind
+
+    /// The settings that say how one test is built, in the shape of a
+    /// configuration entry in `ghul-test.json`. A configuration can set them
+    /// for every test it runs, and a test's own `test.json` sets them for
+    /// that test alone: a key the test sets replaces the configuration's,
+    /// and a key it leaves out keeps it.
+    class TEST_SETTINGS is
+        /// The file that makes a directory a test and holds its settings, as
+        /// a JSON object of configuration keys. `{}` is a test with none.
+        FILE: string static => "test.json"
+
+        /// The configuration keys that say how the whole run is made, which a
+        /// test cannot set for itself.
+        RUN_KEYS: string[] static =>
+            ["extends", "build", "compiler", "runtime", "ildasm", "wasm_host", "ghul", "processes", "ghul_target", "run_targets", "targets"]
+
+        /// The targets the test is built for, one variant each, in place of
+        /// the configuration's `build_targets`; null to leave them to it.
+        build_targets: LIST[string]? public
+
+        /// Whether the test is only type-checked, with `--type-check`.
+        check_only: bool? public
+
+        /// Whether the test builds a library, with `--library`.
+        library: bool? public
+
+        /// The llvm target's optimisation level, 0 to 3, passed as
+        /// `--optimise` after every other option so that it is the one the
+        /// compiler takes.
+        optimise: int? public
+
+        /// Further compiler options, as a command line holds them.
+        flags: string? public
+
+        init() is si
+
+        /// Whether the directory at `path` has a settings file.
+        has(path: string) -> bool static => File.exists(Path.join(path, FILE))
+
+        /// The settings in the test directory `path`. Null, with the reason in
+        /// `problem`, where the file cannot be read or holds anything other
+        /// than settings a test can make.
+        ///
+        /// - path: the test directory
+        /// - problem: set to what is wrong with the file, or null
+        read(path: string, problem: string? ref) -> TEST_SETTINGS? static is
+            problem! = null
+
+            let document = _parse(path, problem)
+
+            if !document? then
+                return null
+            fi
+
+            if document.root_element.value_kind != JsonValueKind.OBJECT then
+                problem! = "{FILE} must hold an object of configuration keys"
+                return null
+            fi
+
+            let result = TEST_SETTINGS()
+
+            if !result.apply(document.root_element, FILE, true, problem) then
+                return null
+            fi
+
+            return result
+        si
+
+        _parse(path: string, problem: string? ref) -> JsonDocument? static is
+            try
+                let options = _[JsonDocumentOptions]
+
+                options.comment_handling = JsonCommentHandling.SKIP
+                options.allow_trailing_commas = true
+
+                return JsonDocument.parse(File.read_all_text(Path.join(path, FILE)), options)
+            catch ex: Ghul.Exception
+                problem! = "{FILE} cannot be read: {ex.message}"
+                return null
+            yrt
+        si
+
+        /// Takes the settings `entry` makes, over any already held. For a
+        /// test, every key must be one a test can set; a configuration's other
+        /// keys are its own business and are left to it.
+        ///
+        /// - entry: a configuration entry, or a test's settings object
+        /// - where: what to name in a problem
+        /// - is_test: whether `entry` is a test's own settings
+        /// - problem: set to what is wrong, or null
+        apply(entry: JsonElement, where: string, is_test: bool, problem: string? ref) -> bool is
+            problem! = null
+
+            for property in entry.enumerate_object() do
+                let key = property.name
+                let value = property.value
+
+                if key =~ "check_only" \/ key =~ "library" then
+                    if value.value_kind != JsonValueKind.TRUE /\ value.value_kind != JsonValueKind.FALSE then
+                        problem! = "{where}: {key} must be true or false"
+                        return false
+                    fi
+
+                    if key =~ "check_only" then
+                        check_only = value.get_boolean()
+                    else
+                        library = value.get_boolean()
+                    fi
+                elif key =~ "optimise" then
+                    let level: int mut
+
+                    if value.value_kind != JsonValueKind.NUMBER \/ !value.try_get_int32(level ref) \/ level < 0 \/ level > 3 then
+                        problem! = "{where}: optimise must be 0, 1, 2 or 3"
+                        return false
+                    fi
+
+                    optimise = level
+                elif key =~ "flags" then
+                    if value.value_kind != JsonValueKind.STRING then
+                        problem! = "{where}: flags must be a string of compiler options"
+                        return false
+                    fi
+
+                    flags = value.get_string()
+                elif is_test /\ key =~ "build_targets" then
+                    let names = _target_names(value, where, problem)
+
+                    if !names? then
+                        return false
+                    fi
+
+                    build_targets = names
+                elif is_test then
+                    if RUN_KEYS |> Ghul.Pipes.any(k => k =~ key) then
+                        problem! = "{where}: {key} says how the whole run is made, so a test cannot set it"
+                    else
+                        problem! = "{where}: {key} is not a configuration key"
+                    fi
+
+                    return false
+                fi
+            od
+
+            return true
+        si
+
+        _target_names(value: JsonElement, where: string, problem: string? ref) -> LIST[string]? static is
+            if value.value_kind != JsonValueKind.ARRAY then
+                problem! = "{where}: build_targets must be an array of target names"
+                return null
+            fi
+
+            let names = LIST[string]()
+
+            for element in value.enumerate_array() do
+                let name = if element.value_kind == JsonValueKind.STRING then element.get_string() ?? "" else "" fi
+
+                if !TEST_TARGETS.of(name)? then
+                    problem! = "{where}: build_targets names {name}, which is not a target ghul-test can run"
+                    return null
+                fi
+
+                if names.contains(name) then
+                    problem! = "{where}: build_targets names {name} twice"
+                    return null
+                fi
+
+                names.add(name)
+            od
+
+            if names.count == 0 then
+                problem! = "{where}: build_targets names no target"
+                return null
+            fi
+
+            return names
+        si
+
+        /// These settings with each one `other` sets in place of this one's.
+        overridden_by(other: TEST_SETTINGS?) -> TEST_SETTINGS is
+            let result = TEST_SETTINGS()
+
+            result.build_targets = other?.build_targets ?? build_targets
+            result.check_only = other?.check_only ?? check_only
+            result.library = other?.library ?? library
+            result.optimise = other?.optimise ?? optimise
+            result.flags = other?.flags ?? flags
+
+            return result
+        si
+
+        /// The compiler options the settings stand for, other than the
+        /// optimisation level, separated by spaces.
+        options: string is
+            let words = LIST[string]()
+
+            if check_only ?? false then
+                words.add("--type-check")
+            fi
+
+            if library ?? false then
+                words.add("--library")
+            fi
+
+            if let more = flags /\ more.trim().length > 0 then
+                words.add(more.trim())
+            fi
+
+            return words |> Ghul.Pipes.join(" ")
+        si
+
+        /// The options that go after everything else on a command line that
+        /// builds for `target`, with a leading space, or nothing.
+        last_options(target: string?) -> string =>
+            if let level = optimise /\ target? /\ target =~ "llvm" then " --optimise {level}" else "" fi
+    si
+si

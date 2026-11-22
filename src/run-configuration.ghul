@@ -93,6 +93,10 @@ namespace Tester is
         /// names itself.
         target_loaders: MAP[string, string]
 
+        /// The settings the configuration makes for every test it runs, which
+        /// a test's own settings override key by key.
+        settings: TEST_SETTINGS
+
         init(name: string) is
             self.name = name
             build = "compiler"
@@ -100,6 +104,7 @@ namespace Tester is
             target_flags = MAP[string, string]()
             package_flags = MAP[string, MAP[string, string]]()
             target_loaders = MAP[string, string]()
+            settings = TEST_SETTINGS()
         si
 
         /// The file at or above `from`, or null where there is none.
@@ -180,6 +185,12 @@ namespace Tester is
         si
 
         _apply(entry: JsonElement, base: string, file: string) is
+            let problem: string? mut = null
+
+            if !settings.apply(entry, "{file}: {name}", false, problem ref) then
+                throw Exception(problem ?? "{file}: {name}: the test settings cannot be read")
+            fi
+
             if let build = string_property(entry, "build") then
                 if build !~ "compiler" /\ build !~ "msbuild" /\ build !~ "direct" /\ build !~ "ghul-cli" then
                     throw Exception("{file}: {name}: build must be compiler, msbuild, direct or ghul-cli, not {build}")

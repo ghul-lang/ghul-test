@@ -72,6 +72,20 @@
             "extends": "tool",
             "compiler": { "path": "record-compiler.sh", "reference_assemblies": "no" }
         },
+        // Settings every test is given, which a test's test.json overrides.
+        "settings": {
+            "extends": "tool",
+            "flags": "--define extra",
+            "run_targets": ["dotnet"]
+        },
+        // A compiler that records its arguments, building for llvm
+        // unoptimised unless a test says otherwise.
+        "recorded-llvm": {
+            "extends": "tool",
+            "compiler": { "path": "record-compiler.sh", "reference_assemblies": false },
+            "run_targets": ["llvm"],
+            "targets": { "llvm": { "flags": "--optimise 0" } }
+        },
         "three-processes": {
             "extends": "tool",
             "processes": 3

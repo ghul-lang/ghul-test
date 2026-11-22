@@ -217,6 +217,30 @@ fi
 echo integration-tests/compiler-override-honoured: PASS
 
 
+echo integration-tests/compiler-named-over-project...
+
+# A compiler the run names wins over the one a project names in GhulCompiler,
+# so a direct build tests the compiler the run asked for. The MSBuild run
+# restores the project first.
+TEST_PROCESSES=1 $RUNNER --config msbuild integration-tests/project-compiler | tee actual-output
+
+if [ "${PIPESTATUS[0]}" != "0" ]; then
+    echo integration-tests/compiler-named-over-project did not build the project with MSBuild
+
+    exit 1
+fi
+
+TEST_PROCESSES=1 $RUNNER --config direct --compiler /bin/false integration-tests/project-compiler | tee actual-output
+
+if [ "${PIPESTATUS[0]}" != "1" ] || ! grep -q "unexpected build failure" actual-output ; then
+    echo integration-tests/compiler-named-over-project built with the compiler the project names, not the one the run named
+
+    exit 1
+fi
+
+echo integration-tests/compiler-named-over-project: PASS
+
+
 echo integration-tests/compiler-override-missing...
 
 # A missing compiler must fail fast with a clear message, not silently fall back
@@ -1163,6 +1187,52 @@ fi
 expect_configuration_problem "unknown build target" "build_targets names cobol" --config build-targets-unknown ../build-targets
 
 expect_configuration_problem "unknown run target" "run_targets names cobol" --config unknown-target tests
+
+# A test's test.json holds configuration keys for that test alone: a key it
+# sets replaces the configuration's, and one it leaves out keeps it.
+expect_configuration_pass "test settings" --config settings settings-tests
+
+if ! grep -q "pass: settings-tests/inherits$" actual-output || ! grep -q "pass: settings-tests/overrides$" actual-output ; then
+    echo integration-tests/configurations: test settings did not keep the configuration flags in one test and replace them in the other
+    exit 1
+fi
+
+if ! grep -q "pass: settings-tests/variants\[dotnet\]" actual-output || ! grep -q "1 tests passed over" actual-output ; then
+    echo integration-tests/configurations: test settings did not build a variant per build target
+    exit 1
+fi
+
+# A test's optimise comes after the configuration's flags for the target, so
+# it is the level the compiler takes.
+rm -f integration-tests/configurations/compiler-arguments
+(cd integration-tests/configurations && env -u CI TEST_PROCESSES=1 $CONFIG_RUNNER --config recorded-llvm llvm-settings 2>&1) > actual-output
+
+if [ "$(grep -A1 -x -- "--optimise" integration-tests/configurations/compiler-arguments | grep -vx -- "--optimise" | grep -v -- '^--$' | tail -1)" != "2" ] ; then
+    cat actual-output
+    echo integration-tests/configurations: a test's optimise did not come after the configuration's
+    exit 1
+fi
+
+expect_test_settings_problem() {
+    local name=$1 problem=$2
+
+    (cd integration-tests/configurations && env -u CI TEST_PROCESSES=1 $CONFIG_RUNNER "bad-settings/$name") | tee actual-output
+
+    if [ "${PIPESTATUS[0]}" != "1" ]; then
+        echo integration-tests/configurations: test settings $name did not exit 1
+        exit 1
+    fi
+
+    if ! grep -q -- "$problem" actual-output ; then
+        echo integration-tests/configurations: test settings $name did not report: $problem
+        exit 1
+    fi
+}
+
+expect_test_settings_problem both "has both test.json and ghulflags"
+expect_test_settings_problem run-wide "compiler says how the whole run is made, so a test cannot set it"
+expect_test_settings_problem unknown "check-only is not a configuration key"
+expect_test_settings_problem bad-optimise "optimise must be 0, 1, 2 or 3"
 
 # recorded_arguments <configuration> [options...]: runs the configuration,
 # whose compiler records what it was given and fails, and leaves the

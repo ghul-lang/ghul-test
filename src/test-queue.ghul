@@ -55,6 +55,10 @@ namespace Tester is
         /// build each test once for the target it names.
         build_targets: Collections.List[string]? public
 
+        /// The settings the configuration makes for every test, which a
+        /// test's own `test.json` overrides key by key.
+        run_settings: TEST_SETTINGS? public
+
         /// For each target, the flags of each library that stands for a
         /// package, keyed by the package in lower case.
         package_flags: Collections.Map[string, Collections.MAP[string, string]] public,
@@ -193,8 +197,9 @@ namespace Tester is
         try_queue_test(path: string) is
             let flags_path = "{path}/ghulflags"
             let marker = if _compiler_under_test.is_ghul_cli then PROJECT.MANIFEST else "ghulflags" fi
+            let has_settings = TEST_SETTINGS.has(path)
 
-            if !File.exists("{path}/{marker}") then
+            if !File.exists("{path}/{marker}") /\ !has_settings then
                 if looks_like_test(path) then
                     _undiscovered.add("{path} looks like a test but has no {marker}")
                 fi
@@ -225,16 +230,41 @@ namespace Tester is
                 return
             fi
 
-            let flags = if File.exists(flags_path) then File.read_all_text(flags_path) else "" fi
+            let own: TEST_SETTINGS? mut = null
+
+            if has_settings then
+                if File.exists(flags_path) then
+                    _undiscovered.add("{path} has both {TEST_SETTINGS.FILE} and ghulflags; its options belong in the flags of {TEST_SETTINGS.FILE}")
+                    return
+                fi
+
+                if TARGET_VARIANTS.has(path) then
+                    _undiscovered.add("{path} has both {TEST_SETTINGS.FILE} and a {TARGET_VARIANTS.TARGETS} file; its targets belong in the build_targets of {TEST_SETTINGS.FILE}")
+                    return
+                fi
+
+                let problem: string? mut = null
+
+                own = TEST_SETTINGS.read(path, problem ref)
+
+                if !own? then
+                    _undiscovered.add("{path}: {problem}")
+                    return
+                fi
+            fi
+
+            let settings = (run_settings ?? TEST_SETTINGS()).overridden_by(own)
+            let written = if File.exists(flags_path) then File.read_all_text(flags_path).trim() else "" fi
+            let flags = "{written} {settings.options}".trim()
 
             // A test whose flags name its target is run in place under
             // build_targets, as it is without them: it is built for that one
             // target either way, and a copy would move it away from files it
             // names relative to itself.
-            if TARGET_VARIANTS.has(path) \/ (build_targets? /\ !TEST.named_target_name(flags)?) then
+            if TARGET_VARIANTS.has(path) \/ own?.build_targets? \/ (build_targets? /\ !TEST.named_target_name(flags)?) then
                 let problem: string? mut = null
 
-                let targets = variant_targets(path, flags, problem ref)
+                let targets = variant_targets(path, flags, own?.build_targets, problem ref)
 
                 if !targets? then
                     _undiscovered.add("{path}: {problem}")
@@ -246,7 +276,7 @@ namespace Tester is
                 _candidate_ordinal = _candidate_ordinal + 1
 
                 if _shard.matches(variant_ordinal) then
-                    queue_variants(path, flags, tags, targets)
+                    queue_variants(path, flags, tags, targets, settings)
                 fi
 
                 return
@@ -281,7 +311,7 @@ namespace Tester is
                 TEST(
                     path,
                     source_files,
-                    with_loader(flags),
+                    "{with_loader(flags)}{last_options(settings, TEST.named_target_name(flags))}",
                     is_build_failure_expected,
                     tags
                 )
@@ -386,20 +416,30 @@ namespace Tester is
         si
 
         // The targets the test at `path` is built for, one variant each: the
-        // ones its `targets` file names, or else the configuration's
-        // `build_targets`. Null, with the reason in `problem`, where the `targets`
+        // ones its settings' `build_targets` or its `targets` file name, or
+        // else the configuration's `build_targets`. Null, with the reason in `problem`, where the `targets`
         // file cannot be used.
-        variant_targets(path: string, flags: string, problem: string? ref) -> Collections.List[string]? is
+        variant_targets(path: string, flags: string, settings_targets: Collections.List[string]?, problem: string? ref) -> Collections.List[string]? is
             problem! = null
 
-            if TARGET_VARIANTS.has(path) then
-                let named = TARGET_VARIANTS.read(path, flags, problem)
+            if TARGET_VARIANTS.has(path) \/ settings_targets? then
+                let named mut = settings_targets
+
+                if named? then
+                    if TEST.named_target(flags)? then
+                        problem! = "{TEST_SETTINGS.FILE} names build_targets and its flags name a target too; a test with build_targets leaves the target to them"
+                        return null
+                    fi
+                else
+                    named = TARGET_VARIANTS.read(path, flags, problem)
+                fi
 
                 if let wanted = build_targets /\ named? then
                     let left_out = wanted |> filter(target => !(named |> any(n => n =~ target))) |> ARRAY()
+                    let own = if settings_targets? then "{TEST_SETTINGS.FILE} build_targets win" else "{TARGET_VARIANTS.TARGETS} file wins" fi
 
                     if left_out.count > 0 then
-                        _overridden.add("{path}: its {TARGET_VARIANTS.TARGETS} file wins over build_targets, so it is not built for {string.join(", ", left_out)}")
+                        _overridden.add("{path}: its {own} over build_targets, so it is not built for {string.join(", ", left_out)}")
                     fi
                 fi
 
@@ -412,7 +452,7 @@ namespace Tester is
         // One test for each of `targets`, each in its own directory with the
         // expectations resolved for that target. The tags are the one test's,
         // and so is the shard ordinal, so a shard holds every variant or none.
-        queue_variants(path: string, flags: string, tags: Iterable[string], targets: Collections.List[string]) is
+        queue_variants(path: string, flags: string, tags: Iterable[string], targets: Collections.List[string], settings: TEST_SETTINGS) is
             for target in targets do
                 let test_target = TEST_TARGETS.of(target) ?? TestTarget.DOTNET
 
@@ -445,7 +485,7 @@ namespace Tester is
                     TEST(
                         directory,
                         get_source_files(directory),
-                        variant_flags(flags, target),
+                        "{variant_flags(flags, target)}{last_options(settings, target)}",
                         File.exists("{directory}/fail.expected"),
                         tags
                     )
@@ -477,6 +517,7 @@ namespace Tester is
 
                         direct.target_options.add_range(["--target", target])
                         direct.target_options.add_range(_words(extra_flags(target)))
+                        direct.target_options.add_range(_words(settings.last_options(target)))
 
                         for package in direct.packages do
                             direct.target_options.add_range(_words(_package_flags[target][package]))
@@ -501,6 +542,17 @@ namespace Tester is
                 "{flags.trim()}{extra_flags(target)}"
             else
                 "{flags.trim()} --target {target}{extra_flags(target)}"
+            fi
+
+        // The options a compiler build of `target` takes after all the
+        // others, so the compiler takes them over any the configuration
+        // gives. A project build's flags are its builder's, not the
+        // compiler's, and a direct one is given them with the target's.
+        last_options(settings: TEST_SETTINGS, target: string?) -> string =>
+            if _compiler_under_test.is_dotnet_build \/ _compiler_under_test.is_ghul_cli then
+                ""
+            else
+                settings.last_options(target)
             fi
 
         // The packages, in lower case, a library stands for under `target`.
