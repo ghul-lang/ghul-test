@@ -12,7 +12,7 @@ Not loaded by local Claude Code; only the cloud reviewer reads this.
 
 `ghul-test` is the snapshot-based integration test runner the compiler's own suite
 runs on, published as the `ghul.test` NuGet package and invoked as `dotnet
-ghul-test`. It walks a directory tree, treats any directory holding a `ghulflags`
+ghul-test`. It walks a directory tree, treats any directory holding a `test.json`
 file as a test, compiles and runs it, and diffs actual output against `*.expected`
 snapshots. Written in ghūl.
 

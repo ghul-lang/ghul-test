@@ -8,17 +8,13 @@ namespace Tester is
     use Collections.LIST
     use Ghul.Pipes
 
-    /// A test that carries a `targets` file runs once per target it names,
+    /// A test whose `build_targets` name several targets runs once per target,
     /// each run in a directory of its own, `.targets/<target>/<test>/`. The
     /// directory holds copies of the test's sources and inputs, and its
     /// expectations resolved for that target: `run.wasm.expected` becomes
     /// that variant's `run.expected`, and a file naming another target is
     /// left out.
     class TARGET_VARIANTS is
-        /// The file naming the targets a test runs under, one or more
-        /// target names separated by spaces or newlines.
-        TARGETS: string static => "targets"
-
         /// The directory under a test holding one directory per target.
         DIRECTORY: string static => ".targets"
 
@@ -39,43 +35,6 @@ namespace Tester is
             let full = Path.get_full_path(path).trim_end(Path.directory_separator_char)
 
             return Path.join([path, DIRECTORY, target, Path.get_file_name(full)])
-        si
-
-        /// Whether the test at `path` carries a `targets` file.
-        has(path: string) -> bool static => File.exists(Path.join(path, TARGETS))
-
-        /// Reads the `targets` file of the test at `path`: the targets it
-        /// names, or null with `problem` set where the file cannot be used.
-        read(path: string, flags: string, problem: string? ref) -> List[string]? static is
-            let names =
-                File.read_all_text(Path.join(path, TARGETS))
-                    .split([' ', '\t', '\r', '\n'])
-                    |> filter(name => name.length > 0)
-                    |> LIST()
-
-            if names.count == 0 then
-                problem! = "{TARGETS} names no target"
-                return null
-            fi
-
-            for name in names do
-                if !TEST_TARGETS.of(name)? then
-                    problem! = "{TARGETS} names {name}, which is not a target ghul-test can run"
-                    return null
-                fi
-            od
-
-            if (names |> Collections.SET()).count != names.count then
-                problem! = "{TARGETS} names a target twice"
-                return null
-            fi
-
-            if TEST.named_target(flags)? then
-                problem! = "ghulflags names a target and so does {TARGETS}; a test with a {TARGETS} file leaves the target to it"
-                return null
-            fi
-
-            return names
         si
 
         /// Builds the directory the `target` variant of the test at `path`
@@ -149,12 +108,11 @@ namespace Tester is
             name =~ "formatted"
 
         /// The name `name` is copied under in the `target` variant's
-        /// directory, or null where it is not copied: the `targets` and
-        /// `ghulflags` files, an artifact a run leaves behind, or an
+        /// directory, or null where it is not copied: an artifact a run leaves behind, or an
         /// expectation for another target. An expectation for this target
         /// takes the plain name, and shadows the plain file.
         name_in_variant(name: string, target: string, names: Collections.SET[string]) -> string? static is
-            if name =~ TARGETS \/ name =~ "ghulflags" \/ is_artifact(name) then
+            if is_artifact(name) then
                 return null
             fi
 
