@@ -208,7 +208,7 @@ namespace Tester is
 
                 let entries = LIST[string](Directory.get_directories(path))
 
-                entries.sort()
+                entries.sort(System.StringComparer.ordinal)
 
                 for entry in entries do
                     // A directory whose name starts with a dot holds something

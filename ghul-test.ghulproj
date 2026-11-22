@@ -28,6 +28,9 @@
     <ToolCommandName>ghul-test</ToolCommandName>
 
     <GhulCompiler>dotnet ghul-compiler</GhulCompiler>
+
+    <!-- The Native AOT runner runs where ICU may not be installed. -->
+    <InvariantGlobalization Condition="'$(PublishAot)' == 'true'">true</InvariantGlobalization>
   </PropertyGroup>
 
   <ItemGroup>
