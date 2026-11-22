@@ -1298,6 +1298,19 @@ fi
 
 rm -f integration-tests/configurations/fork-server-arguments integration-tests/configurations/fork-requests
 
+# The same for project builds of a target other than dotnet: the third
+# project's build goes to the fork server, run in its variant's directory.
+(cd integration-tests/configurations && env -u CI TEST_PROCESSES=1 $CONFIG_RUNNER --config recorded-fork-direct fork-projects 2>&1) > actual-output
+
+if ! grep -q "^fork servers: 1 started, 1 build(s) served from a snapshot, 0 compiled cold$" actual-output || ! grep -qx "directory $(pwd)/integration-tests/configurations/fork-projects/.targets-c-wasm" integration-tests/configurations/fork-requests || ! grep -qx "binary.wasm" integration-tests/configurations/fork-requests ; then
+    cat actual-output
+    cat integration-tests/configurations/fork-requests
+    echo integration-tests/configurations: recorded-fork-direct did not serve the third project build from a fork server
+    exit 1
+fi
+
+rm -f integration-tests/configurations/fork-server-arguments integration-tests/configurations/fork-requests
+
 # recorded_loader <test>: runs the recorded-loader configuration on one of
 # its wasm tests, as recorded_arguments does.
 recorded_loader() {

@@ -175,6 +175,9 @@ namespace Tester is
     /// A test whose arguments only a few tests share is built as before.
     class FORK_SERVER_POOL is
         _executable: string
+
+        /// The native compiler the servers run.
+        executable: string => _executable
         _scratch: string
         _limit: int
         _idle: MAP[string, LIST[FORK_SERVER]]

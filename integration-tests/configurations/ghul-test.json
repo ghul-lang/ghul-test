@@ -69,6 +69,14 @@
             "extends": "tool",
             "compiler": { "path": "record-fork-server.sh", "reference_assemblies": false, "fork_server": true }
         },
+        // The same for project builds of a target other than dotnet.
+        "recorded-fork-direct": {
+            "extends": "tool",
+            "build": "direct",
+            "compiler": { "path": "record-fork-server.sh", "reference_assemblies": false, "fork_server": true },
+            "build_targets": ["wasm"],
+            "run_targets": ["wasm"]
+        },
         "recorded-no-references": {
             "extends": "tool",
             "compiler": { "path": "record-compiler.sh", "reference_assemblies": false }

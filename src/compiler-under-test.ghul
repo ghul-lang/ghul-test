@@ -299,16 +299,27 @@ namespace Tester is
                     command.add_range(reference_arguments(direct.runtime_path))
                 fi
 
-                command.add_range(test.source_files)
-                command.add_range(["-o", direct.output_name])
+                let served =
+                    if direct.target? /\ fork_servers? /\ fork_servers.executable =~ executable then
+                        _build_with_fork_server(runner, test, command, direct.output_name)
+                    else
+                        null
+                    fi
 
-                result = runner.run(
-                    executable,
-                    command,
-                    RUNNER.BUILD_TIMEOUT_MS,
-                    null,
-                    "compiler.out"
-                )
+                if served? then
+                    result = served
+                else
+                    command.add_range(test.source_files)
+                    command.add_range(["-o", direct.output_name])
+
+                    result = runner.run(
+                        executable,
+                        command,
+                        RUNNER.BUILD_TIMEOUT_MS,
+                        null,
+                        "compiler.out"
+                    )
+                fi
 
                 name_the_project(runner.get_path("compiler.out"), direct.project_path)
             elif _run_mode == CompilerRunMode.DOTNET then
@@ -394,8 +405,20 @@ namespace Tester is
         ///
         /// - limit: the most servers that may run at once
         start_fork_servers(limit: int) is
-            if wants_fork_servers /\ _run_mode == CompilerRunMode.LOCAL then
+            if !wants_fork_servers then
+                return
+            fi
+
+            if _run_mode == CompilerRunMode.LOCAL then
                 fork_servers = FORK_SERVER_POOL(_executable, limit)
+            elif let command = _compiler_command /\ _run_mode == CompilerRunMode.DOTNET then
+                // A project build of a target other than dotnet runs the
+                // compiler the run names, where that is a native one.
+                let words = _words(command)
+
+                if words.count == 1 then
+                    fork_servers = FORK_SERVER_POOL(words[0], limit)
+                fi
             fi
         si
 
