@@ -877,7 +877,7 @@ namespace Tester is
             let expectations =
                 Directory.get_files(get_path(), "*.png.expected")
 
-            System.Array.sort(expectations)
+            System.Array.sort(expectations, System.StringComparer.ordinal)
 
             for expectation in expectations do
                 if let name = Path.get_file_name(expectation) then
