@@ -1,0 +1,307 @@
+namespace Tester is
+    use IO.File
+    use IO.Path
+    use IO.Std
+
+    use Collections.LIST
+    use Collections.MAP
+
+    use System.Diagnostics.Process
+    use System.Diagnostics.ProcessStartInfo
+
+    use System.Threading.Monitor
+
+    /// How a build sent to a fork server ended.
+    class FORK_BUILD is
+        /// The compiler's exit status.
+        status: int public
+
+        /// What the compiler wrote to standard error.
+        output: string public
+
+        init(status: int, output: string) is
+            self.status = status
+            self.output = output
+        si
+    si
+
+    /// One native compiler started with `--fork-server`: it compiles the
+    /// libraries its arguments give once, then builds each request in a
+    /// child process forked from that state.
+    class FORK_SERVER is
+        _process: Process
+        _drain: Tasks.TASK
+
+        /// The arguments the server was started with, apart from
+        /// `--fork-server` itself: what a build has to share with it.
+        arguments: LIST[string] public
+
+        /// Whether the server can take another build: false once it has
+        /// ended or a build timed out.
+        is_alive: bool public
+
+        /// - executable: the native compiler
+        /// - arguments: the arguments every build it serves shares
+        /// - scratch: a directory the server's own output can be written to
+        init(executable: string, arguments: LIST[string], scratch: string) is
+            self.arguments = arguments
+
+            let start_info = ProcessStartInfo()
+
+            start_info.file_name = executable
+            start_info.use_shell_execute = false
+            start_info.redirect_standard_input = true
+            start_info.redirect_standard_output = true
+            start_info.redirect_standard_error = true
+
+            for argument in arguments do
+                start_info.argument_list.add(argument)
+            od
+
+            start_info.argument_list.add("--fork-server")
+            start_info.argument_list.add("-o")
+            start_info.argument_list.add(Path.join(scratch, "server"))
+
+            let process = Process.start(start_info)
+
+            if !process? then
+                throw Ghul.Exception("failed to start a fork server: {executable}")
+            fi
+
+            _process = process
+
+            // Nothing the server writes to standard output is part of the
+            // protocol, but a pipe nobody reads stops the writer.
+            _drain = process.standard_output.read_to_end_async()
+
+            is_alive = true
+        si
+
+        /// Builds the response file `response_file` in `directory`, or
+        /// gives null where the server did not answer within `timeout`
+        /// milliseconds, after which it is stopped.
+        ///
+        /// - response_file: the build's arguments, one a line
+        /// - directory: the directory the build runs in
+        /// - timeout: how long the build may take, in milliseconds
+        build(response_file: string, directory: string, timeout: int) -> FORK_BUILD? is
+            _process.standard_input.write("{response_file}\t{directory}\n")
+            _process.standard_input.flush()
+
+            let output = Text.StringBuilder()
+            let deadline = RUNNER.now_ms() + long(timeout)
+
+            do
+                let remaining = deadline - RUNNER.now_ms()
+                let reading = _process.standard_error.read_line_async()
+
+                if remaining <= 0L \/ !reading.wait(int(remaining)) then
+                    stop()
+                    return null
+                fi
+
+                let line = reading.result
+
+                if !line? then
+                    is_alive = false
+                    return null
+                fi
+
+                if line.starts_with("\u0001build-done ") then
+                    return FORK_BUILD(int.parse(line.substring(12).trim()), output.to_string())
+                fi
+
+                output.append(line)
+                output.append('\n')
+            od
+        si
+
+        /// Ends the server, giving the line it ends with: how many builds its
+        /// snapshot served and how many it compiled cold, or null where it
+        /// wrote none.
+        quit() -> string? is
+            if !is_alive then
+                return null
+            fi
+
+            is_alive = false
+
+            try
+                _process.standard_input.write_line("quit")
+                _process.standard_input.close()
+
+                let summary: string? mut = null
+
+                do
+                    let reading = _process.standard_error.read_line_async()
+
+                    if !reading.wait(10000) then
+                        break
+                    fi
+
+                    let line = reading.result
+
+                    if !line? then
+                        break
+                    fi
+
+                    if line.starts_with("\u0001fork-server ") then
+                        summary = line.substring(1)
+                    fi
+                od
+
+                _process.wait_for_exit(10000)
+
+                return summary
+            catch e: Ghul.Exception
+                return null
+            yrt
+        si
+
+        /// Stops the server and any build it is running.
+        stop() is
+            is_alive = false
+
+            try
+                _process.kill(true)
+                _process.wait_for_exit()
+            catch e: Ghul.Exception
+            yrt
+        si
+    si
+
+    /// The fork servers a run builds its wasm and llvm tests with: one per
+    /// parallel slot for each set of arguments that enough tests share.
+    /// A test whose arguments only a few tests share is built as before.
+    class FORK_SERVER_POOL is
+        _executable: string
+        _scratch: string
+        _limit: int
+        _idle: MAP[string, LIST[FORK_SERVER]]
+        _uses: MAP[string, int]
+        _all: LIST[FORK_SERVER]
+
+        /// How many tests have to share a set of arguments before a server
+        /// is started for them.
+        min_uses: int static => 3
+
+        /// - executable: the native compiler
+        /// - limit: the most servers that may run at once
+        init(executable: string, limit: int) is
+            _executable = executable
+            _limit = limit
+            _scratch = Path.join(Path.get_temp_path(), "ghul-test-fork-{System.Environment.process_id}")
+            _idle = MAP[string, LIST[FORK_SERVER]]()
+            _uses = MAP[string, int]()
+            _all = LIST[FORK_SERVER]()
+
+            IO.Directory.create_directory(_scratch)
+        si
+
+        /// Builds a test with a fork server, or gives null where no server is
+        /// free for its arguments, in which case it is built as before.
+        ///
+        /// - arguments: the build's arguments, apart from its sources and output
+        /// - request: the build's whole response file, already written
+        /// - directory: the test directory, which the build runs in
+        /// - timeout: how long the build may take, in milliseconds
+        build(arguments: LIST[string], request: string, directory: string, timeout: int) -> FORK_BUILD? is
+            let server = _acquire(arguments)
+
+            if !server? then
+                return null
+            fi
+
+            let result = server.build(request, directory, timeout)
+
+            _release(server)
+
+            return result
+        si
+
+        _key(arguments: LIST[string]) -> string static =>
+            arguments |> Ghul.Pipes.join("\n")
+
+        _acquire(arguments: LIST[string]) -> FORK_SERVER? is
+            let key = _key(arguments)
+
+            Monitor.enter(self)
+
+            try
+                if _idle.contains_key(key) /\ _idle[key].count > 0 then
+                    let list = _idle[key]
+                    let server = list[list.count - 1]
+
+                    list.remove_at(list.count - 1)
+
+                    return server
+                fi
+
+                let uses = if _uses.contains_key(key) then _uses[key] + 1 else 1 fi
+
+                _uses[key] = uses
+
+                let live = _all |> Ghul.Pipes.count(s => s.is_alive)
+
+                if uses < min_uses \/ live >= _limit then
+                    return null
+                fi
+
+                let server = FORK_SERVER(_executable, arguments, _scratch)
+
+                _all.add(server)
+
+                return server
+            finally
+                Monitor.exit(self)
+            yrt
+        si
+
+        _release(server: FORK_SERVER) is
+            if !server.is_alive then
+                return
+            fi
+
+            let key = _key(server.arguments)
+
+            Monitor.enter(self)
+
+            try
+                if !_idle.contains_key(key) then
+                    _idle[key] = LIST[FORK_SERVER]()
+                fi
+
+                _idle[key].add(server)
+            finally
+                Monitor.exit(self)
+            yrt
+        si
+
+        /// Ends every server, writing how many builds were served from a
+        /// snapshot and how many were compiled cold.
+        shut_down() is
+            let served mut = 0
+            let cold mut = 0
+
+            for server in _all do
+                if let summary = server.quit() then
+                    let words = summary.split([' '])
+
+                    if words.count == 5 then
+                        served = served + int.parse(words[2])
+                        cold = cold + int.parse(words[4])
+                    fi
+                fi
+            od
+
+            if _all.count > 0 then
+                Std.write_line("fork servers: {_all.count} started, {served} build(s) served from a snapshot, {cold} compiled cold")
+            fi
+
+            try
+                IO.Directory.delete(_scratch, true)
+            catch e: Ghul.Exception
+            yrt
+        si
+    si
+si

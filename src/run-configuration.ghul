@@ -48,6 +48,12 @@ namespace Tester is
         /// compiler hosted outside .NET, which reads no assemblies.
         reference_assemblies: bool
 
+        /// Whether a `compiler` build of a wasm or llvm test goes to a fork
+        /// server: the native compiler started with `--fork-server`, which
+        /// compiles the libraries once for every build. True where the
+        /// `compiler` object says `"fork_server": true`.
+        fork_server: bool
+
         /// How many tests run at once, from `processes`, or null for a number
         /// derived from the processor count.
         processes: int?
@@ -101,6 +107,7 @@ namespace Tester is
             self.name = name
             build = "compiler"
             reference_assemblies = true
+            fork_server = false
             target_flags = MAP[string, string]()
             package_flags = MAP[string, MAP[string, string]]()
             target_loaders = MAP[string, string]()
@@ -318,6 +325,7 @@ namespace Tester is
             publish_directory = null
             compiler_command = null
             reference_assemblies = true
+            fork_server = false
 
             if compiler.value_kind == JsonValueKind.STRING then
                 let kind = compiler.get_string()
@@ -362,6 +370,16 @@ namespace Tester is
                     reference_assemblies = false
                 elif references.value_kind != JsonValueKind.TRUE then
                     throw Exception("{file}: {name}: compiler: reference_assemblies must be true or false")
+                fi
+            fi
+
+            let fork: JsonElement mut
+
+            if compiler.try_get_property("fork_server", fork ref) then
+                if fork.value_kind == JsonValueKind.TRUE then
+                    fork_server = true
+                elif fork.value_kind != JsonValueKind.FALSE then
+                    throw Exception("{file}: {name}: compiler: fork_server must be true or false")
                 fi
             fi
         si

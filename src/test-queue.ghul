@@ -109,6 +109,8 @@ namespace Tester is
 
             _task_queue = TASK_QUEUE(actual_test_processes)
 
+            _compiler_under_test.start_fork_servers(actual_test_processes)
+
             Std.write_line("using {actual_test_processes} processes to run tests")
 
             _tests = LIST[TEST]()

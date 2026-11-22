@@ -79,6 +79,21 @@ namespace Tester is
         init(test: TEST) is super.init(test); si
     si
 
+    /// A test that failed when built by a fork server and passed when built
+    /// cold: counted as a pass, and reported with what the served build did.
+    class SERVED_FAILURE_PASS: PASS is
+        _served: string
+
+        head: string => "⚠️ pass"
+
+        body: string? => "failed when built by a fork server, passed when built cold: {_served}"
+
+        init(test: TEST, served: string) is
+            super.init(test)
+            _served = served
+        si
+    si
+
     class FAILURE: Result is
         _details: MutableList[DETAILS]
 
