@@ -75,7 +75,10 @@ jobs:
       image: mcr.microsoft.com/dotnet/sdk:10.0
 
     timeout-minutes: 10
-    needs: [version]
+
+    # A package is published only with the Native AOT runners of its version,
+    # which the release attaches beside it.
+    needs: [version, native]
 
     steps:
     - uses: actions/checkout@v7
@@ -170,9 +173,12 @@ jobs:
       if: matrix.rid == 'linux-x64'
       run: GHUL_TEST_RUNNER="$PWD/native/ghul-test/ghul-test" integration-tests/run-integration-tests.sh
 
+    # The repository's configuration takes its runtime from the JIT build.
     - name: Run a test with the Native AOT runner
       if: matrix.rid != 'linux-x64'
-      run: TEST_PROCESSES=1 native/ghul-test/ghul-test integration-tests/execution-pass
+      run: |
+        dotnet build -nologo -v quiet
+        TEST_PROCESSES=1 native/ghul-test/ghul-test integration-tests/execution-pass
 
     - name: Package the Native AOT runner
       run: |
