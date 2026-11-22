@@ -18,7 +18,7 @@ namespace Tester is
             Std.output_encoding = UTF8_ENCODING()
 
             if arguments.count == 0 then
-                Std.write_line("usage: ghul-test [--config <name>] [--compiler <command>] [--tag <name>]... [--not-tag <name>]... [--shard <index>/<count>] <test-folder>...")
+                Std.write_line("usage: ghul-test [--config <name>] [--compiler <command>] [--tag <name>]... [--not-tag <name>]... [--shard <index>/<count>] [--commands <file>] <test-folder>...")
                 return 1
             fi
 
@@ -35,6 +35,9 @@ namespace Tester is
             let target_flags = Collections.MAP[string, string]()
 
             let shard_spec: string? mut
+
+            // Where --commands writes the build commands, in place of a run.
+            let commands_file: string? mut = null
 
             let configuration_name: string? mut = null
 
@@ -65,6 +68,15 @@ namespace Tester is
                     fi
 
                     compiler_option = arguments[i]
+                elif arg =~ "--commands" then
+                    i = i + 1
+
+                    if i >= arguments.count then
+                        Std.write_line("--commands requires a file argument")
+                        return 1
+                    fi
+
+                    commands_file = arguments[i]
                 elif arg =~ "--shard" then
                     i = i + 1
 
@@ -175,7 +187,7 @@ namespace Tester is
 
                 compiler_under_test.reference_assemblies = configuration.reference_assemblies
                 compiler_under_test.wants_fork_servers =
-                    configuration.fork_server /\ !System.Environment.get_environment_variable("GHUL_TEST_NO_FORK_SERVER")?
+                    configuration.fork_server /\ !commands_file? /\ !System.Environment.get_environment_variable("GHUL_TEST_NO_FORK_SERVER")?
                 compiler_under_test.set_runtime_path(runtime_dll_override)
                 compiler_under_test.set_compiler_command(compiler_override)
                 compiler_under_test.set_ghul_command(ghul_command)
@@ -252,6 +264,7 @@ namespace Tester is
             queue.run_settings = configuration.settings
             queue.package_flags = configuration.package_flags
             queue.target_loaders = configuration.target_loaders
+            queue.commands_file = commands_file
 
             for path in requested.paths do
                 if !Directory.exists(path) then
@@ -266,6 +279,14 @@ namespace Tester is
 
             if let pool = compiler_under_test.fork_servers then
                 pool.shut_down()
+            fi
+
+            if commands_file? then
+                for reason in queue.undiscovered do
+                    Std.write_line("not run: {reason}")
+                od
+
+                return if queue.undiscovered_count == 0 then 0 else 1 fi
             fi
 
             if shard.is_whole then

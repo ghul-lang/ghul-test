@@ -1232,6 +1232,39 @@ if [ "$(grep -A1 -x -- "--optimise" integration-tests/configurations/compiler-ar
     exit 1
 fi
 
+# commands_match <configuration> <tests>: --commands writes exactly the
+# arguments a run of the same configuration hands its compiler.
+commands_match() {
+    local name=$1 tests=$2
+
+    rm -f integration-tests/configurations/compiler-arguments integration-tests/configurations/commands.jsonl
+    (cd integration-tests/configurations && env -u CI TEST_PROCESSES=1 $CONFIG_RUNNER --config "$name" "$tests" 2>&1) > actual-output
+    (cd integration-tests/configurations && env -u CI TEST_PROCESSES=1 $CONFIG_RUNNER --config "$name" --commands commands.jsonl "$tests" 2>&1) >> actual-output
+
+    if [ "$(wc -l < integration-tests/configurations/commands.jsonl)" != 1 ] ; then
+        cat actual-output
+        echo integration-tests/configurations: --commands with $name did not write one command for $tests
+        exit 1
+    fi
+
+    if ! jq -r '.options + .sources + ["-o", .output] | .[]' integration-tests/configurations/commands.jsonl | diff - integration-tests/configurations/compiler-arguments ; then
+        cat actual-output
+        echo integration-tests/configurations: --commands with $name differs from what a run hands the compiler
+        exit 1
+    fi
+
+    if ! grep -q "1 build commands written to commands.jsonl" actual-output ; then
+        cat actual-output
+        echo integration-tests/configurations: --commands with $name did not report what it wrote
+        exit 1
+    fi
+
+    rm -f integration-tests/configurations/commands.jsonl
+}
+
+commands_match recorded-llvm llvm-settings
+commands_match recorded tests
+
 expect_test_settings_problem() {
     local name=$1 problem=$2
 
