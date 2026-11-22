@@ -281,6 +281,14 @@ namespace Tester is
                 Std.write_line("{queue.passed_over_count} tests passed over for targets the configuration does not run")
             fi
 
+            if queue.left_out_target_count > 0 then
+                Std.write_line("{queue.left_out_target_count} tests not built for a target their own build_targets leave out")
+            fi
+
+            if queue.filtered_out_count > 0 then
+                Std.write_line("{queue.filtered_out_count} tests left out by the tag filter")
+            fi
+
             Std.write_line("{queue.pass_count}/{queue.executed_count} tests passed")
 
             for reason in queue.undiscovered do
