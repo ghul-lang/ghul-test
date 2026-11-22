@@ -1178,8 +1178,15 @@ fi
 
 expect_configuration_pass "build targets, a test's own winning" --config build-targets ../own-build-targets
 
-if ! grep -q "its test.json build_targets win over build_targets, so it is not built for wasm" actual-output ; then
+if ! grep -q "^1 tests not built for a target their own build_targets leave out$" actual-output || grep -q "own-build-targets.*win over" actual-output ; then
     echo integration-tests/configurations: build targets did not report the own build_targets of a test winning
+    exit 1
+fi
+
+expect_configuration_pass "a tag filter leaving a test out" --config dotnet-only --tag no-such-tag ../own-build-targets
+
+if ! grep -q "^1 tests left out by the tag filter$" actual-output ; then
+    echo integration-tests/configurations: a tag filter did not count the test it left out
     exit 1
 fi
 

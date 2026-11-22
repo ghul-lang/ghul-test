@@ -44,12 +44,16 @@ namespace Tester is
         /// does not cover.
         passed_over_count: int
 
+        /// How many tests the tag filter left out.
+        filtered_out_count: int
+
+        /// How many tests are not built for a target the configuration's
+        /// `build_targets` names, because their own `build_targets` leave it
+        /// out.
+        left_out_target_count: int
+
         // Why variants were passed over other than for the run's targets.
         _passed_over_reasons: MutableList[string]
-
-        // Tests whose `targets` file leaves out targets `build_targets` names,
-        // reported so a target not built is visible in the run.
-        _overridden: MutableList[string]
 
         /// The targets each test is built for, one variant each, or null to
         /// build each test once for the target it names.
@@ -116,7 +120,6 @@ namespace Tester is
             _tests = LIST[TEST]()
             _undiscovered = LIST[string]()
             _passed_over_reasons = LIST[string]()
-            _overridden = LIST[string]()
             _package_flags = Collections.MAP[string, Collections.MAP[string, string]]()
             target_loaders = Collections.MAP[string, string]()
         si
@@ -246,6 +249,7 @@ namespace Tester is
             let tags = get_tags(path)
 
             if !_tag_filter.matches(tags) then
+                filtered_out_count = filtered_out_count + 1
                 return
             fi
 
@@ -436,12 +440,8 @@ namespace Tester is
                     return null
                 fi
 
-                if let wanted = build_targets then
-                    let left_out = wanted |> filter(target => !(named |> any(n => n =~ target))) |> ARRAY()
-
-                    if left_out.count > 0 then
-                        _overridden.add("{path}: its {TEST_SETTINGS.FILE} build_targets win over build_targets, so it is not built for {string.join(", ", left_out)}")
-                    fi
+                if let wanted = build_targets /\ wanted |> any(target => !(named |> any(n => n =~ target))) then
+                    left_out_target_count = left_out_target_count + 1
                 fi
 
                 return named
@@ -572,12 +572,11 @@ namespace Tester is
         si
 
         // Why variants were passed over for a reason other than the run's
-        // targets, once each with how many.
+        // targets, once each with how many. A test whose own build_targets
+        // leave out a target the configuration builds is not one of them:
+        // that is how a test says the target is not its point, so it is only
+        // counted.
         report_passed_over() is
-            for line in _overridden do
-                Std.write_line(line)
-            od
-
             for reason in _passed_over_reasons |> Ghul.Pipes.distinct() do
                 Std.write_line("passed over {_passed_over_reasons |> Ghul.Pipes.count(r => r =~ reason)} variant(s): {reason}")
             od
