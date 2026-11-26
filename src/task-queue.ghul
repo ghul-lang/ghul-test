@@ -6,16 +6,16 @@ namespace Tester is
     use Collections.LIST
 
     class TASK_QUEUE(max_tasks: int private) is
-        _running_tasks: LIST[Tasks.TASK[Result]]
+        _running_tasks: LIST[Concurrency.Future[Result]]
 
         init(..) is
-            _running_tasks = LIST[Tasks.TASK[Result]](max_tasks)
+            _running_tasks = LIST[Concurrency.Future[Result]](max_tasks)
         si
 
         queue(task: () -> Result) -> Iterable[Result] is
             let result = wait_any()
 
-            let new_task = Tasks.TASK[Result](task)
+            let new_task = Concurrency.Future[Result](task)
 
             new_task.start()
 
@@ -42,9 +42,9 @@ namespace Tester is
                 return result
             fi
 
-            Tasks.TASK.wait_any(_running_tasks |> map(t -> Tasks.TASK => t) |> ARRAY())
+            Concurrency.Future.wait_any(_running_tasks |> map(t -> Concurrency.Future => t) |> ARRAY())
 
-            let new_tasks = LIST[Tasks.TASK[Result]]()
+            let new_tasks = LIST[Concurrency.Future[Result]]()
 
             for task in _running_tasks do
                 if task.is_completed then

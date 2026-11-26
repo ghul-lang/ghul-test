@@ -30,7 +30,7 @@ namespace Tester is
     /// child process forked from that state.
     class FORK_SERVER is
         _process: Process
-        _drain: Tasks.TASK
+        _drain: Concurrency.Future
 
         /// The arguments the server was started with, apart from
         /// `--fork-server` itself: what a build has to share with it.
