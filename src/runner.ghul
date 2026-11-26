@@ -1496,9 +1496,9 @@ namespace Tester is
 
             let reading_out =
                 if let session = session_file_name then
-                    Tasks.TASK.run(() -> string => drive_session(process, session, timing))
+                    Concurrency.Future.run(() -> string => drive_session(process, session, timing))
                 else
-                    Tasks.TASK.run(() -> string => drain_output(process, timing))
+                    Concurrency.Future.run(() -> string => drain_output(process, timing))
                 fi
 
             let reading_err = process.standard_error.read_to_end_async()
@@ -1626,7 +1626,7 @@ namespace Tester is
             let text = read_all_text(in_file_name)
 
             let _ =
-                Tasks.TASK.run(() is
+                Concurrency.Future.run(() is
                     try
                         process.standard_input.write(text)
                         process.standard_input.close()
